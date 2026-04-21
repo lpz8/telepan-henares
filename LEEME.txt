@@ -1,0 +1,104 @@
+══════════════════════════════════════════════════════════════
+  TELEPAN HENARES — VERSIÓN 7 FINAL
+  App de gestión de obrador y reparto de pan a domicilio
+══════════════════════════════════════════════════════════════
+
+TUS DATOS (ya configurados en la app):
+  Empresa  : TELEPAN HENARES S.G.L.
+  Titular  : Yeny Rubi Ruiz Carvajal
+  NIE      : Z1806715R
+  Email    : telepansgl@gmail.com
+  Teléfono : 633 95 85 32
+  Bizum    : 622334126
+  IBAN     : ES9420858284100330219325
+
+TU SUPABASE:
+  URL      : https://cbozdjosionujkrxhwz.supabase.co
+  UUID     : 2477f15f-9085-45ab-a0c2-b323188fa2d8
+  Panel    : https://supabase.com/dashboard/project/cbozdjosionujkrxhwz
+
+══════════════════════════════════════════════════════════════
+  PASO 1 — SUPABASE (solo la primera vez)
+══════════════════════════════════════════════════════════════
+
+1. Ve a https://supabase.com → tu proyecto TELEPAN
+2. Menú izquierdo → SQL Editor → botón "+" (nueva pestaña)
+3. Pega TODO el contenido de "TELEPAN_DATABASE.sql"
+4. Pulsa RUN (Ctrl+Enter)
+5. Al final verás: productos=30, clientes=111, configuracion=1 ✅
+
+══════════════════════════════════════════════════════════════
+  PASO 2 — CONFIGURAR LA APP
+══════════════════════════════════════════════════════════════
+
+Necesitas la ANON KEY de Supabase:
+  → Supabase → Settings → API → "anon public" (empieza por eyJ...)
+
+OPCIÓN A — Local (en tu PC):
+  1. Abre el archivo "frontend/.env"
+  2. Cambia PON_AQUI_TU_ANON_KEY por tu anon key real
+  3. Guarda el archivo
+  4. Abre terminal en carpeta "frontend"
+  5. Escribe: npm install --legacy-peer-deps
+  6. Escribe: npm run dev
+  7. Abre: http://localhost:3000
+  8. Email: telepansgl@gmail.com
+  9. Contraseña: la que tienes en Supabase → Authentication
+
+OPCIÓN B — Vercel (para móvil y cualquier lugar, GRATIS):
+  1. Sube la carpeta "frontend" a GitHub como repositorio
+  2. Ve a https://vercel.com → New Project → importa el repo
+  3. Root Directory: frontend (o deja vacío si solo subiste frontend)
+  4. Build Command: npm install --legacy-peer-deps && npm run build
+  5. Output Directory: dist
+  6. Environment Variables → añade:
+       VITE_SUPABASE_URL  = https://cbozdjosionujkrxhwz.supabase.co
+       VITE_SUPABASE_ANON_KEY = tu_anon_key
+  7. Deploy → en 2 minutos tienes la URL
+  8. Instala en iPhone: Safari → Compartir → "Añadir a inicio"
+  9. Instala en Android: Chrome → Menú → "Instalar aplicación"
+
+OPCIÓN C — Netlify (alternativa a Vercel):
+  1. Ve a https://netlify.com → Add new site → GitHub
+  2. Base directory: frontend
+  3. Build command: npm install --legacy-peer-deps && npm run build
+  4. Publish directory: dist
+  5. Environment variables: igual que Vercel
+  6. Deploy
+
+══════════════════════════════════════════════════════════════
+  PASO 3 — IA ANÁLISIS DE FACTURAS (GRATIS)
+══════════════════════════════════════════════════════════════
+
+Usa OpenRouter (gratis, sin límite diario problemático):
+  1. Ve a https://openrouter.ai → Sign In con Gmail
+  2. Settings → Keys → Create Key → nombre "TelePan"
+  3. Copia la key (empieza por sk-or-v1-...)
+  4. En la app → IA Facturas → pega la key → Guardar
+  ✅ Una sola key funciona indefinidamente
+
+══════════════════════════════════════════════════════════════
+  FUNCIONALIDADES COMPLETAS
+══════════════════════════════════════════════════════════════
+
+✅ Dashboard con estadísticas en tiempo real
+✅ Pedidos diarios con generación automática
+✅ Pedidos habituales con frecuencias y reordenación
+✅ Suspensiones vacacionales por cliente
+✅ Albaranes con impresión por cliente y ruta
+✅ Facturas con IVA desglosado (4%/10%/21%)
+✅ Control de cobros (efectivo/bizum/transferencia)
+✅ Estadísticas con gráficos (5 pestañas)
+✅ IA análisis de facturas con OpenRouter
+✅ Catálogo de precios imprimible
+✅ Gestión de gastos mensuales
+✅ Rutas diarias ordenables
+✅ Backup completo export/import
+✅ App instalable en iPhone y Android (PWA)
+✅ Diseño responsive móvil
+
+══════════════════════════════════════════════════════════════
+  SOPORTE
+══════════════════════════════════════════════════════════════
+  Ante cualquier duda, abre Claude.ai y pega este mensaje:
+  "Soy Yeny de TelePan Henares, proyecto Supabase cbozdjosionujkrxhwz"
