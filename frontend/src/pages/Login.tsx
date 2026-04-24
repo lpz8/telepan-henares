@@ -14,17 +14,19 @@ export default function Login() {
     e.preventDefault()
     if (!password) { setError('Introduce tu contraseña'); return }
     setLoading(true); setError('')
-    const { error: err } = await signIn(email, password)
-    if (err) setError('Contraseña incorrecta. Compruébala en Supabase → Authentication')
+   try {
+  await signIn(email, password)
+} catch (err: any) {
+  setError(err.message || 'Contraseña incorrecta')
+}
+
     setLoading(false)
   }
 
   return (
-    <div className="login-bg">
+    <div className="login-page">
       <div className="login-card">
-        <div className="login-logo-wrap">
-          <img src={logoUrl} alt="TelePan Henares" className="login-logo" />
-        </div>
+        <img src={logoUrl} alt="TelePan Henares" className="login-logo" />
         <h1 className="login-title">TelePan Henares</h1>
         <p className="login-sub">"La panadería en casa"</p>
 
