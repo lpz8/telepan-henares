@@ -14,6 +14,7 @@ export default function Productos() {
   const { user } = useAuth()
   const [productos, setProductos] = useState<any[]>([])
   const [filterCat, setFilterCat] = useState('all')
+  const [busqueda, setBusqueda] = useState('')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState(empty)
@@ -47,7 +48,14 @@ export default function Productos() {
     load()
   }
 
-  const filtered = filterCat === 'all' ? productos : productos.filter(p => p.categoria === filterCat)
+  const filtered = productos.filter(p => {
+    if (filterCat !== 'all' && p.categoria !== filterCat) return false
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      if (!p.nombre?.toLowerCase().includes(q) && !p.categoria?.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
   const pvp = (p: any) => (Number(p.precio_sin_iva) * (1 + Number(p.iva) / 100)).toFixed(2)
 
   const ivaColor = (iva: number) => {
@@ -61,6 +69,11 @@ export default function Productos() {
       <div className="page-header">
         <h1 className="page-title">📦 Productos</h1>
         <div className="page-actions">
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+            <input className="input" placeholder="Buscar producto..." value={busqueda}
+              onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34, width: 200 }} />
+          </div>
           <select className="select" style={{ width: 'auto' }} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
             <option value="all">Todas las categorías</option>
             {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}

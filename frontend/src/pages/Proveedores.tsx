@@ -15,6 +15,7 @@ export default function Proveedores() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState(empty)
+  const [busqueda, setBusqueda] = useState('')
 
   const load = async () => {
     const { data } = await supabase.from('proveedores').select('*').order('nombre')
@@ -71,13 +72,29 @@ export default function Proveedores() {
     setPrecios(prev => prev.filter((p: any) => p.id !== id))
   }
 
+  const filteredProv = proveedores.filter(p => {
+    if (!busqueda.trim()) return true
+    const q = busqueda.toLowerCase()
+    return p.nombre?.toLowerCase().includes(q) ||
+      p.telefono?.toLowerCase().includes(q) ||
+      p.email?.toLowerCase().includes(q) ||
+      p.contacto?.toLowerCase().includes(q)
+  })
+
   return (
     <div>
       <div className="page-header">
         <h1 className="page-title">🚚 Proveedores</h1>
-        <button className="btn btn-primary" onClick={() => { setEditing(null); setForm(empty); setOpen(true) }}>
-          <Plus size={16} /> Nuevo
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+            <input className="input" placeholder="Buscar proveedor..." value={busqueda}
+              onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34, width: 200 }} />
+          </div>
+          <button className="btn btn-primary" onClick={() => { setEditing(null); setForm(empty); setOpen(true) }}>
+            <Plus size={16} /> Nuevo
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
@@ -87,7 +104,7 @@ export default function Proveedores() {
               <tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>Dirección</th><th></th></tr>
             </thead>
             <tbody>
-              {proveedores.map(p => (
+              {filteredProv.map(p => (
                 <tr key={p.id}>
                   <td><strong>{p.nombre}</strong></td>
                   <td>{p.contacto}</td>

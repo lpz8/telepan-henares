@@ -25,6 +25,7 @@ export default function Rutas() {
   const [todosClientes, setTodosClientes] = useState<any[]>([])
   const [resumenSemana, setResumenSemana] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [clienteAdd, setClienteAdd] = useState('')
 
@@ -153,12 +154,18 @@ export default function Rutas() {
       {/* ── RUTA DEL DÍA ── */}
       {tab === 'ruta' && (
         <>
+          {/* BUSCADOR */}
+          <div style={{ position: 'relative', maxWidth: 280, marginBottom: 10 }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+            <input className="input" placeholder="Buscar cliente en ruta..." value={busqueda}
+              onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34 }} />
+          </div>
           <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 12, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700 }}>
             📋 Ruta del {DIAS[dia]} — <strong style={{ color: 'var(--naranja)' }}>{rutaClientes.length} clientes</strong>
             <span style={{ fontWeight: 400, color: 'var(--gris)', marginLeft: 8 }}>Reordena con las flechas y guarda.</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {rutaClientes.map((c, idx) => (
+            {(busqueda.trim() ? rutaClientes.filter(c => c.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || String(c.codigo)?.includes(busqueda)) : rutaClientes).map((c, idx) => (
               <div key={c.id} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--naranja)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fredoka One', flexShrink: 0 }}>
                   {idx + 1}
