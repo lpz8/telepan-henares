@@ -35,12 +35,12 @@ export default function Pedidos() {
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<string[]>([])
   const [busqueda, setBusqueda] = useState('')
-  const [tabActiva, setTabActiva] = useState<'pedidos' | 'resumen'>('pedidos')
+  const [tabActiva, setTabActiva] = useState<string>('pedidos')
 
   const load = async () => {
     const { data } = await supabase
       .from('pedidos')
-      .select('*, clientes(nombre, codigo, orden_ruta, poblacion), productos(nombre, iva)')
+      .select('*, clientes(nombre, codigo, orden_ruta, poblacion), productos(nombre, iva, categoria)')
       .eq('fecha', fecha)
       .order('created_at')
     if (data) setPedidos(data)
@@ -183,6 +183,80 @@ export default function Pedidos() {
   })()
   const totalResumen = resumenArticulos.reduce((s, a) => s + a.cantidad, 0)
 
+  // Categorías presentes en los pedidos del día
+  const ORDEN_CATS = ['Pan', 'Bollería', 'Pastelería', 'Huevos', 'Otros']
+  const categoriasDelDia = ORDEN_CATS.filter(cat =>
+    pedidos.some(p => (p.productos?.categoria || 'Pan') === cat)
+  )
+
+  // Resumen por categoría
+  const resumenPorCategoria = (cat: string) => {
+    const pedidosCat = pedidos.filter(p => (p.productos?.categoria || 'Pan') === cat)
+    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean }> = {}
+    pedidosCat.forEach(p => {
+      const nombre: string = p.productos?.nombre || 'Desconocido'
+      const cantidad = Number(p.cantidad)
+      const up = nombre.toUpperCase().trim()
+      if (cat === 'Pan' && up.startsWith('CASA')) {
+        if (!totales['__CASA__']) totales['__CASA__'] = { nombre: 'BARRA CASA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__CASA__'].cantidad += cantidad
+      } else if (cat === 'Pan' && up.startsWith('PISTOLA')) {
+        if (!totales['__PISTOLA__']) totales['__PISTOLA__'] = { nombre: 'BARRA PISTOLA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__PISTOLA__'].cantidad += cantidad
+      } else {
+        if (!totales[up]) totales[up] = { nombre, cantidad: 0 }
+        totales[up].cantidad += cantidad
+      }
+    })
+    return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
+  }
+
+  const CAT_EMOJI: Record<string, string> = {
+    'Pan': '🍞', 'Bollería': '🥐', 'Pastelería': '🎂', 'Huevos': '🥚', 'Otros': '📦'
+  }
+
+  const renderTablaResumen = (arts: { nombre: string; cantidad: number; esAgrupado?: boolean }[], total: number) => (
+    <div className="card" style={{ padding: 0 }}>
+      <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', fontSize: '1rem' }}>📦 Total artículos — {fecha}</span>
+        <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '1.1rem' }}>{total} unidades</span>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Artículo</th><th style={{ textAlign: 'center' }}>Unidades</th><th style={{ textAlign: 'center' }}>% del total</th></tr></thead>
+          <tbody>
+            {arts.map((a, i) => (
+              <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '' }}>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {a.esAgrupado && <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 800 }}>AGRUPADO</span>}
+                    <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)', fontSize: '0.95rem' }}>{a.nombre}</strong>
+                  </div>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <span style={{ fontFamily: 'Fredoka One', fontSize: '1.8rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>{a.cantidad}</span>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                    <div style={{ width: 100, height: 10, background: '#f3f4f6', borderRadius: 5, overflow: 'hidden' }}>
+                      <div style={{ width: `${total > 0 ? (a.cantidad / total * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 5 }} />
+                    </div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--gris)', minWidth: 36 }}>
+                      {total > 0 ? (a.cantidad / total * 100).toFixed(1) : 0}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {arts.length === 0 && (
+              <tr><td colSpan={3}><div className="empty-state"><p>No hay artículos de esta categoría hoy</p></div></td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+
   const toggleExpand = (id: string) => {
     setExpandedClients(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
@@ -226,75 +300,44 @@ export default function Pedidos() {
       </div>
 
       {/* TABS */}
-      <div className="tabs">
+      <div className="tabs" style={{ flexWrap: 'wrap' }}>
         <div className={`tab ${tabActiva === 'pedidos' ? 'active' : ''}`} onClick={() => setTabActiva('pedidos')}>
-          🛒 Pedidos del día ({sortedGroups.length} clientes)
+          🛒 Pedidos del día ({sortedGroups.length})
         </div>
         <div className={`tab ${tabActiva === 'resumen' ? 'active' : ''}`} onClick={() => setTabActiva('resumen')}>
-          📦 Resumen para proveedor ({totalResumen} ud)
+          📦 Resumen total ({totalResumen} ud)
         </div>
+        {categoriasDelDia.map(cat => (
+          <div key={cat} className={`tab ${tabActiva === cat ? 'active' : ''}`} onClick={() => setTabActiva(cat as any)}>
+            {CAT_EMOJI[cat]} {cat} ({resumenPorCategoria(cat).reduce((s, a) => s + a.cantidad, 0)} ud)
+          </div>
+        ))}
       </div>
 
-      {/* TAB RESUMEN PROVEEDOR */}
+      {/* TAB RESUMEN TOTAL */}
       {tabActiva === 'resumen' && (
         <div>
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: '#1e40af', fontWeight: 700 }}>
-            📋 Pedido total del <strong>{fecha}</strong> — lo que necesitas pedir al proveedor hoy.
-            <br/><span style={{ fontWeight: 400, fontSize: '0.78rem' }}>💡 <strong>CASA*</strong> y <strong>PISTOLA*</strong> agrupadas — misma barra, distintos precios.</span>
+            📋 Pedido total del <strong>{fecha}</strong> — todos los artículos de todos los clientes.
+            <br/><span style={{ fontWeight: 400, fontSize: '0.78rem' }}>💡 <strong>CASA*</strong> y <strong>PISTOLA*</strong> agrupadas.</span>
           </div>
-          <div className="card" style={{ padding: 0 }}>
-            <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', fontSize: '1rem' }}>📦 Total artículos — {fecha}</span>
-              <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '1.1rem' }}>{totalResumen} unidades</span>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Artículo</th>
-                    <th style={{ textAlign: 'center' }}>Unidades</th>
-                    <th style={{ textAlign: 'center' }}>% del total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumenArticulos.map((a, i) => (
-                    <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '' }}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {a.esAgrupado && (
-                            <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 800 }}>AGRUPADO</span>
-                          )}
-                          <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)', fontSize: '0.95rem' }}>{a.nombre}</strong>
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.8rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>
-                          {a.cantidad}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                          <div style={{ width: 100, height: 10, background: '#f3f4f6', borderRadius: 5, overflow: 'hidden' }}>
-                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 5 }} />
-                          </div>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--gris)', minWidth: 36 }}>
-                            {totalResumen > 0 ? (a.cantidad / totalResumen * 100).toFixed(1) : 0}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {resumenArticulos.length === 0 && (
-                    <tr><td colSpan={3}>
-                      <div className="empty-state"><p>No hay pedidos para esta fecha</p></div>
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {renderTablaResumen(resumenArticulos, totalResumen)}
         </div>
       )}
+
+      {/* TABS POR CATEGORÍA */}
+      {categoriasDelDia.includes(tabActiva) && (() => {
+        const arts = resumenPorCategoria(tabActiva)
+        const total = arts.reduce((s, a) => s + a.cantidad, 0)
+        return (
+          <div>
+            <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700 }}>
+              {CAT_EMOJI[tabActiva]} Pedido de <strong>{tabActiva}</strong> del {fecha} — <strong style={{ color: 'var(--naranja)' }}>{total} unidades en total</strong>
+            </div>
+            {renderTablaResumen(arts, total)}
+          </div>
+        )
+      })()}
 
       {/* TAB PEDIDOS */}
       {tabActiva === 'pedidos' && <>
