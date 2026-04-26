@@ -33,9 +33,11 @@ export default function Pedidos() {
   const [openManual, setOpenManual] = useState(false)
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
-  const [suspendidos, setSuspendidos] = useState<string[]>([])
+  const [suspendidos, setSuspendidos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [tabActiva, setTabActiva] = useState<string>('pedidos')
+  const [openSuspModal, setOpenSuspModal] = useState(false)
+  const [editSusp, setEditSusp] = useState<any>(null)
 
   const load = async () => {
     const { data } = await supabase
@@ -48,10 +50,10 @@ export default function Pedidos() {
     // Load suspensions for this date
     const { data: susps } = await supabase
       .from('suspensiones_pedido')
-      .select('cliente_id')
+      .select('*, clientes(nombre, codigo)')
       .lte('fecha_inicio', fecha)
       .gte('fecha_fin', fecha)
-    if (susps) setSuspendidos(susps.map(s => s.cliente_id))
+    if (susps) setSuspendidos(susps)
   }
 
   useEffect(() => { load() }, [fecha])
@@ -284,11 +286,18 @@ export default function Pedidos() {
         </div>
       </div>
 
-      {/* Aviso clientes suspendidos */}
+      {/* Aviso clientes suspendidos — clicable */}
       {suspendidos.length > 0 && (
-        <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', color: '#92400e' }}>
+        <div onClick={() => setOpenSuspModal(true)} style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', color: '#92400e', cursor: 'pointer' }}>
           <PauseCircle size={18} />
-          <strong>{suspendidos.length} cliente{suspendidos.length > 1 ? 's' : ''} suspendido{suspendidos.length > 1 ? 's' : ''}</strong> por vacaciones para esta fecha — no se incluirán al generar pedidos
+          <div style={{ flex: 1 }}>
+            <strong>{suspendidos.length} cliente{suspendidos.length > 1 ? 's' : ''} suspendido{suspendidos.length > 1 ? 's' : ''}</strong>
+            {' '}para esta fecha —{' '}
+            {suspendidos.map((s: any) => s.clientes?.nombre).join(', ')}
+          </div>
+          <span style={{ fontSize: '0.78rem', fontWeight: 800, background: '#f59e0b', color: 'white', borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+            ✏️ Ver / modificar
+          </span>
         </div>
       )}
 
@@ -418,6 +427,88 @@ export default function Pedidos() {
       </div>
 
       </>}
+
+      {/* Modal suspensiones */}
+      {openSuspModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenSuspModal(false)}>
+          <div className="modal" style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">⏸ Clientes suspendidos</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenSuspModal(false)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              {suspendidos.map((s: any) => (
+                <div key={s.id} style={{ background: 'var(--crema)', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: '1px solid #f5e8d8' }}>
+                  {editSusp?.id === s.id ? (
+                    /* Modo edición */
+                    <div>
+                      <div style={{ fontWeight: 800, color: 'var(--marron)', marginBottom: 10 }}>
+                        ✏️ #{s.clientes?.codigo} — {s.clientes?.nombre}
+                      </div>
+                      <div className="form-grid-2" style={{ marginBottom: 8 }}>
+                        <div className="input-group" style={{ marginBottom: 0 }}>
+                          <label className="input-label">Fecha inicio</label>
+                          <input className="input" type="date" value={editSusp.fecha_inicio}
+                            onChange={e => setEditSusp((prev: any) => ({ ...prev, fecha_inicio: e.target.value }))} />
+                        </div>
+                        <div className="input-group" style={{ marginBottom: 0 }}>
+                          <label className="input-label">Fecha fin</label>
+                          <input className="input" type="date" value={editSusp.fecha_fin}
+                            onChange={e => setEditSusp((prev: any) => ({ ...prev, fecha_fin: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div className="input-group" style={{ marginBottom: 10 }}>
+                        <label className="input-label">Motivo</label>
+                        <select className="select" value={editSusp.motivo}
+                          onChange={e => setEditSusp((prev: any) => ({ ...prev, motivo: e.target.value }))}>
+                          <option value="Vacaciones">🏖 Vacaciones</option>
+                          <option value="Enfermedad">🏥 Enfermedad</option>
+                          <option value="Viaje">✈️ Viaje</option>
+                          <option value="Cierre temporal">🔒 Cierre temporal</option>
+                          <option value="Otro">📝 Otro</option>
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-primary btn-sm" onClick={async () => {
+                          await supabase.from('suspensiones_pedido').update({
+                            fecha_inicio: editSusp.fecha_inicio,
+                            fecha_fin: editSusp.fecha_fin,
+                            motivo: editSusp.motivo
+                          }).eq('id', s.id)
+                          globalToast('✅ Suspensión actualizada')
+                          setEditSusp(null); load()
+                        }}>💾 Guardar</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setEditSusp(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Modo vista */
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, color: 'var(--marron)' }}>#{s.clientes?.codigo} — {s.clientes?.nombre}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--gris)', marginTop: 2 }}>
+                          📅 {s.fecha_inicio} → {s.fecha_fin} &nbsp;·&nbsp;
+                          <span style={{ fontWeight: 700 }}>{s.motivo}</span>
+                        </div>
+                      </div>
+                      <button className="btn btn-primary btn-sm" onClick={() => setEditSusp({ ...s })}>✏️ Modificar</button>
+                      <button className="btn btn-success btn-sm" onClick={async () => {
+                        if (!confirm(`¿Reanudar pedidos de ${s.clientes?.nombre} ahora?`)) return
+                        await supabase.from('suspensiones_pedido').delete().eq('id', s.id)
+                        globalToast(`✅ ${s.clientes?.nombre} reanudado`)
+                        load()
+                      }}>✅ Reanudar</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenSuspModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal añadir manual */}
       {openManual && (
