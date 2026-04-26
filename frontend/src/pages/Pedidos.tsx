@@ -308,8 +308,22 @@ export default function Pedidos() {
           onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34 }} />
       </div>
 
-      {/* TABS */}
-      <div className="tabs" style={{ flexWrap: 'wrap' }}>
+      {/* SELECTOR DE VISTA — select en móvil, tabs en escritorio */}
+      <div className="tabs-mobile-select">
+        <select
+          value={tabActiva}
+          onChange={e => setTabActiva(e.target.value)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '2px solid var(--naranja)', fontFamily: 'Nunito', fontWeight: 800, fontSize: '0.95rem', color: 'var(--marron)', background: '#fff8f0', marginBottom: 12 }}>
+          <option value="pedidos">🛒 Pedidos del día ({sortedGroups.length} clientes)</option>
+          <option value="resumen">📦 Resumen total ({totalResumen} ud)</option>
+          {categoriasDelDia.map(cat => (
+            <option key={cat} value={cat}>
+              {CAT_EMOJI[cat]} {cat} ({resumenPorCategoria(cat).reduce((s, a) => s + a.cantidad, 0)} ud)
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="tabs-desktop" style={{ flexWrap: 'wrap' }}>
         <div className={`tab ${tabActiva === 'pedidos' ? 'active' : ''}`} onClick={() => setTabActiva('pedidos')}>
           🛒 Pedidos del día ({sortedGroups.length})
         </div>

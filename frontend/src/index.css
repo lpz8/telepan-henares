@@ -418,6 +418,16 @@ tbody tr:last-child { border-bottom: none; }
   width: 220px;
 }
 
+
+/* TABS RESPONSIVOS — select en móvil, tabs en escritorio */
+.tabs-mobile-select { display: none; }
+.tabs-desktop { display: flex; gap: 4px; border-bottom: 2px solid #f5e8d8; margin-bottom: 16px; flex-wrap: wrap; }
+
+@media (max-width: 768px) {
+  .tabs-mobile-select { display: block; }
+  .tabs-desktop { display: none; }
+}
+
 /* PRINT STYLES */
 @media print {
   .sidebar, .topbar, .no-print { display: none !important; }

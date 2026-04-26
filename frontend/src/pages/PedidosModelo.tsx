@@ -469,7 +469,14 @@ export default function PedidosModelo() {
       </div>
 
       {/* ══ TABS ══ */}
-      <div className="tabs">
+      <div className="tabs-mobile-select">
+        <select value={tabActiva} onChange={e => setTabActiva(e.target.value as any)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '2px solid var(--naranja)', fontFamily: 'Nunito', fontWeight: 800, fontSize: '0.95rem', color: 'var(--marron)', background: '#fff8f0', marginBottom: 12 }}>
+          <option value="habituales">📋 Habituales ({sorted.length} clientes)</option>
+          <option value="resumen">📦 Resumen artículos ({totalResumen} ud)</option>
+        </select>
+      </div>
+      <div className="tabs-desktop">
         <div className={`tab ${tabActiva === 'habituales' ? 'active' : ''}`} onClick={() => setTabActiva('habituales')}>
           📋 Habituales ({sorted.length} clientes)
         </div>
