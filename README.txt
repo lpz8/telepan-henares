@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/logo.jpg" alt="TelePan Henares Logo" width="180" style="border-radius:20px"/>
+<img src="https://raw.githubusercontent.com/lpz8/telepan-henares/main/frontend/public/logo.jpg" alt="TelePan Henares Logo" width="300"/>
 
 # 🍞 TelePan Henares
 
