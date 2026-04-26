@@ -296,18 +296,24 @@ export default function Clientes() {
                         : <span style={{ color: '#16a34a', fontSize: '0.8rem' }}>✅ Al día</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(c)}><Edit2 size={14} /></button>
                         <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(c.id)}><Trash2 size={14} /></button>
                         <button className="btn btn-secondary btn-sm btn-icon" title="Ver historial" onClick={() => verHistorial(c)}>📋</button>
-                        {deudas[c.id] > 0 && (
-                          <button style={{ background: '#25D366', color: 'white', border: 'none', fontWeight: 800, fontSize: '0.72rem', padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
-                            onClick={() => {
-                              const tel = (c.telefono1 || '').replace(/\D/g, '')
-                              const msg = encodeURIComponent(`Hola ${c.nombre}, le recordamos que tiene una deuda pendiente de ${deudas[c.id].toFixed(2)}€. Por favor contacte con nosotros. Gracias, TelePan Henares.`)
-                              window.open(`https://wa.me/34${tel}?text=${msg}`, '_blank')
-                            }}>📱</button>
-                        )}
+                        {/* WhatsApp — siempre visible, verde si tiene tel, gris si no */}
+                        <button
+                          title={c.telefono1 ? 'Enviar WhatsApp' : 'Sin teléfono registrado'}
+                          style={{ background: c.telefono1 ? '#25D366' : '#ccc', color: 'white', border: 'none', fontWeight: 800, fontSize: '0.72rem', padding: '4px 8px', borderRadius: 6, cursor: c.telefono1 ? 'pointer' : 'not-allowed' }}
+                          onClick={() => {
+                            if (!c.telefono1) return
+                            const tel = c.telefono1.replace(/\D/g, '')
+                            const msg = deudas[c.id] > 0
+                              ? encodeURIComponent(`Hola ${c.nombre}, le recordamos que tiene una deuda pendiente de ${deudas[c.id].toFixed(2)}€. Por favor contacte con nosotros. Gracias, TelePan Henares 🍞`)
+                              : encodeURIComponent(`Hola ${c.nombre}, le contactamos desde TelePan Henares. ¿En qué podemos ayudarle? 🍞`)
+                            window.open(`https://wa.me/34${tel}?text=${msg}`, '_blank')
+                          }}>
+                          📱
+                        </button>
                       </div>
                     </td>
                   </tr>
