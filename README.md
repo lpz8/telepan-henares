@@ -23,7 +23,7 @@
 
 **TelePan Henares** es una aplicación web diseñada específicamente para gestionar el día a día de una panadería de reparto a domicilio. Desde los pedidos diarios hasta la generación de facturas, todo en un solo lugar, accesible desde el móvil, tablet u ordenador.
 
-> Desarrollada para **Yeny Rubi Ruiz Carvajal** — TELEPAN HENARES S.G.L.
+> Desarrollada para por y para **Sergio Garcia Lopez** — TELEPAN HENARES S.G.L.
 > Calle Valdecanillas 59 3A, 28037 Madrid · Tel: 633 958 532
 
 ---
