@@ -34,6 +34,8 @@ export default function Pedidos() {
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<string[]>([])
+  const [busqueda, setBusqueda] = useState('')
+  const [tabActiva, setTabActiva] = useState<'pedidos' | 'resumen'>('pedidos')
 
   const load = async () => {
     const { data } = await supabase
@@ -145,12 +147,41 @@ export default function Pedidos() {
     return acc
   }, {})
 
-  const sortedGroups = Object.entries(grouped).sort(([, a]: any, [, b]: any) => {
-    return parseInt(a.cliente?.codigo || '9999') - parseInt(b.cliente?.codigo || '9999')
-  })
+  const sortedGroups = Object.entries(grouped)
+    .sort(([, a]: any, [, b]: any) => parseInt(a.cliente?.codigo || '9999') - parseInt(b.cliente?.codigo || '9999'))
+    .filter(([, { cliente }]: any) => {
+      if (!busqueda.trim()) return true
+      const q = busqueda.toLowerCase()
+      return cliente?.nombre?.toLowerCase().includes(q) ||
+        String(cliente?.codigo)?.includes(q) ||
+        cliente?.poblacion?.toLowerCase().includes(q)
+    })
 
   const totalUnidades = pedidos.reduce((s, p) => s + Number(p.cantidad), 0)
   const totalEuros = pedidos.reduce((s, p) => s + Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100), 0)
+
+  // Resumen artículos del día — CASA* y PISTOLA* agrupados
+  const resumenArticulos = (() => {
+    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean }> = {}
+    pedidos.forEach(p => {
+      const nombre: string = p.productos?.nombre || 'Desconocido'
+      const cantidad = Number(p.cantidad)
+      const up = nombre.toUpperCase().trim()
+      if (up.startsWith('CASA')) {
+        if (!totales['__CASA__']) totales['__CASA__'] = { nombre: 'BARRA CASA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__CASA__'].cantidad += cantidad
+      } else if (up.startsWith('PISTOLA')) {
+        if (!totales['__PISTOLA__']) totales['__PISTOLA__'] = { nombre: 'BARRA PISTOLA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__PISTOLA__'].cantidad += cantidad
+      } else {
+        const key = up
+        if (!totales[key]) totales[key] = { nombre, cantidad: 0 }
+        totales[key].cantidad += cantidad
+      }
+    })
+    return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
+  })()
+  const totalResumen = resumenArticulos.reduce((s, a) => s + a.cantidad, 0)
 
   const toggleExpand = (id: string) => {
     setExpandedClients(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -186,6 +217,87 @@ export default function Pedidos() {
           <strong>{suspendidos.length} cliente{suspendidos.length > 1 ? 's' : ''} suspendido{suspendidos.length > 1 ? 's' : ''}</strong> por vacaciones para esta fecha — no se incluirán al generar pedidos
         </div>
       )}
+
+      {/* BUSCADOR */}
+      <div style={{ position: 'relative', maxWidth: 300, marginBottom: 12 }}>
+        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+        <input className="input" placeholder="Buscar cliente..." value={busqueda}
+          onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34 }} />
+      </div>
+
+      {/* TABS */}
+      <div className="tabs">
+        <div className={`tab ${tabActiva === 'pedidos' ? 'active' : ''}`} onClick={() => setTabActiva('pedidos')}>
+          🛒 Pedidos del día ({sortedGroups.length} clientes)
+        </div>
+        <div className={`tab ${tabActiva === 'resumen' ? 'active' : ''}`} onClick={() => setTabActiva('resumen')}>
+          📦 Resumen para proveedor ({totalResumen} ud)
+        </div>
+      </div>
+
+      {/* TAB RESUMEN PROVEEDOR */}
+      {tabActiva === 'resumen' && (
+        <div>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: '#1e40af', fontWeight: 700 }}>
+            📋 Pedido total del <strong>{fecha}</strong> — lo que necesitas pedir al proveedor hoy.
+            <br/><span style={{ fontWeight: 400, fontSize: '0.78rem' }}>💡 <strong>CASA*</strong> y <strong>PISTOLA*</strong> agrupadas — misma barra, distintos precios.</span>
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', fontSize: '1rem' }}>📦 Total artículos — {fecha}</span>
+              <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '1.1rem' }}>{totalResumen} unidades</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Artículo</th>
+                    <th style={{ textAlign: 'center' }}>Unidades</th>
+                    <th style={{ textAlign: 'center' }}>% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumenArticulos.map((a, i) => (
+                    <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '' }}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {a.esAgrupado && (
+                            <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 800 }}>AGRUPADO</span>
+                          )}
+                          <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)', fontSize: '0.95rem' }}>{a.nombre}</strong>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.8rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>
+                          {a.cantidad}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                          <div style={{ width: 100, height: 10, background: '#f3f4f6', borderRadius: 5, overflow: 'hidden' }}>
+                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 5 }} />
+                          </div>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--gris)', minWidth: 36 }}>
+                            {totalResumen > 0 ? (a.cantidad / totalResumen * 100).toFixed(1) : 0}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {resumenArticulos.length === 0 && (
+                    <tr><td colSpan={3}>
+                      <div className="empty-state"><p>No hay pedidos para esta fecha</p></div>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB PEDIDOS */}
+      {tabActiva === 'pedidos' && <>
 
       {/* Resumen */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -261,6 +373,8 @@ export default function Pedidos() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* Modal añadir manual */}
       {openManual && (
