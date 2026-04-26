@@ -16,6 +16,7 @@ export default function Albaranes() {
   const [fecha, setFecha] = useState(today)
   const [pedidos, setPedidos] = useState<any[]>([])
   const [enviando, setEnviando] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
     supabase
@@ -33,11 +34,15 @@ export default function Albaranes() {
     return acc
   }, {})
 
-  const sortedGroups = Object.entries(grouped).sort(([, a]: any, [, b]: any) => {
-    const ca = parseInt(a.cliente?.codigo || '9999')
-    const cb = parseInt(b.cliente?.codigo || '9999')
-    return ca - cb
-  })
+  const sortedGroups = Object.entries(grouped)
+    .sort(([, a]: any, [, b]: any) => (a.cliente?.orden_ruta || 999) - (b.cliente?.orden_ruta || 999))
+    .filter(([, { cliente }]: any) => {
+      if (!busqueda.trim()) return true
+      const q = busqueda.toLowerCase()
+      return cliente?.nombre?.toLowerCase().includes(q) ||
+        String(cliente?.codigo)?.includes(q) ||
+        cliente?.poblacion?.toLowerCase().includes(q)
+    })
 
   const buildAlbaranHTML = (clienteId: string) => {
     const { cliente, items } = grouped[clienteId]
@@ -161,6 +166,13 @@ export default function Albaranes() {
             </>
           )}
         </div>
+      </div>
+
+      {/* BUSCADOR */}
+      <div style={{ position: 'relative', maxWidth: 300, marginBottom: 12 }}>
+        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+        <input className="input" placeholder="Buscar cliente..." value={busqueda}
+          onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34 }} />
       </div>
 
       {sortedGroups.length > 0 && (

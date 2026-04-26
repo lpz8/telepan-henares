@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Zap, Plus, Trash2, X, ChevronDown, ChevronUp, AlertCircle, PauseCircle } from 'lucide-react'
+import { Zap, Plus, Trash2, X, ChevronDown, ChevronUp, PauseCircle, Package } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
-// Get ISO week number
 function getWeekNumber(dateStr: string): number {
   const d = new Date(dateStr + 'T12:00:00')
   const jan1 = new Date(d.getFullYear(), 0, 1)
@@ -16,7 +15,7 @@ function getWeekNumber(dateStr: string): number {
 function shouldInclude(frecuencia: string, fecha: string): boolean {
   if (!frecuencia || frecuencia === 'todos') return true
   const week = getWeekNumber(fecha)
-  if (frecuencia === 'si_no') return week % 2 === 1  // odd weeks = yes
+  if (frecuencia === 'si_no') return week % 2 === 1
   if (frecuencia === 'semanas_impares') return week % 2 === 1
   if (frecuencia === 'semanas_pares') return week % 2 === 0
   return true
@@ -34,6 +33,8 @@ export default function Pedidos() {
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<string[]>([])
+  const [tab, setTab] = useState<'pedidos' | 'resumen'>('pedidos')
+  const [busquedaCliente, setBusquedaCliente] = useState('')
 
   const load = async () => {
     const { data } = await supabase
@@ -43,7 +44,6 @@ export default function Pedidos() {
       .order('created_at')
     if (data) setPedidos(data)
 
-    // Load suspensions for this date
     const { data: susps } = await supabase
       .from('suspensiones_pedido')
       .select('cliente_id')
@@ -85,7 +85,6 @@ export default function Pedidos() {
 
       await supabase.from('pedidos').delete().eq('fecha', fecha).eq('user_id', user.id)
 
-      // Load suspensions for this date
       const { data: susps } = await supabase
         .from('suspensiones_pedido')
         .select('cliente_id')
@@ -93,28 +92,30 @@ export default function Pedidos() {
         .gte('fecha_fin', fecha)
       const clientesSuspendidos = new Set((susps || []).map(s => s.cliente_id))
 
-      // Filter by suspension, cantidad > 0, and frequency
-      const inserts = modelos
+      // Ordenar por ruta antes de insertar
+      const modelosFiltrados = modelos
         .filter(m => m.cantidad > 0)
         .filter(m => !clientesSuspendidos.has(m.cliente_id))
         .filter(m => shouldInclude(m.frecuencia, fecha))
-        .map(m => ({
-          user_id: user.id,
-          fecha,
-          cliente_id: m.cliente_id,
-          producto_id: m.producto_id,
-          cantidad: m.cantidad,
-          precio: Number(m.productos?.precio_sin_iva || 0),
-          iva: Number(m.productos?.iva || 4),
-        }))
+        .sort((a, b) => (a.clientes?.orden_ruta || 999) - (b.clientes?.orden_ruta || 999))
+
+      const inserts = modelosFiltrados.map(m => ({
+        user_id: user.id,
+        fecha,
+        cliente_id: m.cliente_id,
+        producto_id: m.producto_id,
+        cantidad: m.cantidad,
+        precio: Number(m.productos?.precio_sin_iva || 0) * (1 - Number(m.descuento || 0) / 100),
+        iva: Number(m.productos?.iva || 4),
+      }))
 
       const skipped = modelos.filter(m => clientesSuspendidos.has(m.cliente_id))
       const skippedFreq = modelos.filter(m => !shouldInclude(m.frecuencia, fecha))
 
       if (inserts.length > 0) await supabase.from('pedidos').insert(inserts)
 
-      let msg = `✅ ${inserts.length} pedidos generados para ${diaName}`
-      if (skipped.length > 0) msg += ` · ${new Set(skipped.map(m => m.cliente_id)).size} clientes suspendidos omitidos`
+      let msg = `✅ ${inserts.length} pedidos generados para ${diaName} (ordenados por ruta)`
+      if (skipped.length > 0) msg += ` · ${new Set(skipped.map(m => m.cliente_id)).size} suspendidos omitidos`
       if (skippedFreq.length > 0) msg += ` · ${skippedFreq.length} omitidos por frecuencia`
       globalToast(msg)
       load()
@@ -145,9 +146,15 @@ export default function Pedidos() {
     return acc
   }, {})
 
-  const sortedGroups = Object.entries(grouped).sort(([, a]: any, [, b]: any) => {
-    return parseInt(a.cliente?.codigo || '9999') - parseInt(b.cliente?.codigo || '9999')
-  })
+  const sortedGroups = Object.entries(grouped)
+    .sort(([, a]: any, [, b]: any) => (a.cliente?.orden_ruta || 999) - (b.cliente?.orden_ruta || 999))
+    .filter(([, { cliente }]: any) => {
+      if (!busquedaCliente.trim()) return true
+      const q = busquedaCliente.toLowerCase()
+      return cliente?.nombre?.toLowerCase().includes(q) ||
+        String(cliente?.codigo)?.includes(q) ||
+        cliente?.poblacion?.toLowerCase().includes(q)
+    })
 
   const totalUnidades = pedidos.reduce((s, p) => s + Number(p.cantidad), 0)
   const totalEuros = pedidos.reduce((s, p) => s + Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100), 0)
@@ -155,6 +162,37 @@ export default function Pedidos() {
   const toggleExpand = (id: string) => {
     setExpandedClients(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
+
+  // ── RESUMEN DE ARTÍCULOS DEL DÍA ──
+  // Suma todos los productos iguales
+  // Agrupa los que empiezan por "CASA" o "PISTOLA" como una sola línea
+  const resumenArticulos = (() => {
+    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean }> = {}
+
+    pedidos.forEach(p => {
+      const nombre: string = p.productos?.nombre || 'Desconocido'
+      const cantidad = Number(p.cantidad)
+      const nombreUpper = nombre.toUpperCase().trim()
+
+      // Artículos que empiezan por CASA o PISTOLA → agrupar juntos
+      if (nombreUpper.startsWith('CASA')) {
+        if (!totales['__CASA__']) totales['__CASA__'] = { nombre: 'BARRA CASA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__CASA__'].cantidad += cantidad
+      } else if (nombreUpper.startsWith('PISTOLA')) {
+        if (!totales['__PISTOLA__']) totales['__PISTOLA__'] = { nombre: 'BARRA PISTOLA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__PISTOLA__'].cantidad += cantidad
+      } else {
+        // Resto de productos: sumar por nombre exacto
+        const key = nombre.toUpperCase()
+        if (!totales[key]) totales[key] = { nombre, cantidad: 0 }
+        totales[key].cantidad += cantidad
+      }
+    })
+
+    return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
+  })()
+
+  const totalResumen = resumenArticulos.reduce((s, a) => s + a.cantidad, 0)
 
   return (
     <div>
@@ -169,15 +207,23 @@ export default function Pedidos() {
         </div>
       </div>
 
-      {/* Aviso clientes suspendidos */}
       {suspendidos.length > 0 && (
         <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', color: '#92400e' }}>
           <PauseCircle size={18} />
-          <strong>{suspendidos.length} cliente{suspendidos.length > 1 ? 's' : ''} suspendido{suspendidos.length > 1 ? 's' : ''}</strong> por vacaciones para esta fecha — no se incluirán al generar pedidos
+          <strong>{suspendidos.length} cliente{suspendidos.length > 1 ? 's' : ''} suspendido{suspendidos.length > 1 ? 's' : ''}</strong> por vacaciones — no se incluirán al generar
         </div>
       )}
 
-      {/* Resumen */}
+      {/* BUSCADOR CLIENTES */}
+<div style={{ position: 'relative', maxWidth: 300, marginBottom: 12 }}>
+  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
+  <input className="input" placeholder="Buscar cliente..."
+    value={busquedaCliente} onChange={e => setBusquedaCliente(e.target.value)}
+    style={{ paddingLeft: 34 }} />
+</div>
+
+
+      {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
           { label: 'Clientes', value: sortedGroups.length, color: 'var(--naranja)' },
@@ -191,56 +237,127 @@ export default function Pedidos() {
         ))}
       </div>
 
-      {/* Pedidos por cliente */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {sortedGroups.map(([clienteId, { cliente, items }]: any) => {
-          const total = items.reduce((s: number, p: any) => s + Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100), 0)
-          const isExpanded = expandedClients.has(clienteId)
-          return (
-            <div key={clienteId} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', background: 'var(--crema-dark)' }}
-                onClick={() => toggleExpand(clienteId)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '1rem' }}>#{cliente?.codigo}</span>
-                  <strong>{cliente?.nombre}</strong>
-                  <span className="badge badge-gray">{cliente?.poblacion}</span>
+      {/* TABS */}
+      <div className="tabs" style={{ marginBottom: 14 }}>
+        <div className={`tab ${tab === 'pedidos' ? 'active' : ''}`} onClick={() => setTab('pedidos')}>
+          📋 Por cliente ({sortedGroups.length})
+        </div>
+        <div className={`tab ${tab === 'resumen' ? 'active' : ''}`} onClick={() => setTab('resumen')}>
+          <Package size={14} style={{ display: 'inline', marginRight: 4 }} />
+          Resumen artículos ({totalResumen} ud)
+        </div>
+      </div>
+
+      {/* TAB: PEDIDOS POR CLIENTE */}
+      {tab === 'pedidos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {sortedGroups.map(([clienteId, { cliente, items }]: any) => {
+            const total = items.reduce((s: number, p: any) => s + Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100), 0)
+            const isExpanded = expandedClients.has(clienteId)
+            return (
+              <div key={clienteId} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', background: 'var(--crema-dark)' }}
+                  onClick={() => toggleExpand(clienteId)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '0.9rem' }}>#{cliente?.codigo}</span>
+                    <strong>{cliente?.nombre}</strong>
+                    <span className="badge badge-gray">{cliente?.poblacion}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 800, color: '#16a34a' }}>{total.toFixed(2)} €</span>
+                    <span style={{ color: 'var(--gris)' }}>{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontWeight: 800, color: '#16a34a' }}>{total.toFixed(2)} €</span>
-                  <span style={{ color: 'var(--gris)' }}>{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
-                </div>
+                {isExpanded && (
+                  <div style={{ padding: '0 0 8px' }}>
+                    <table style={{ width: '100%' }}>
+                      <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
+                      <tbody>
+                        {items.map((p: any) => (
+                          <tr key={p.id}>
+                            <td>{p.productos?.nombre}</td>
+                            <td>{p.cantidad}</td>
+                            <td>{Number(p.precio).toFixed(2)} €</td>
+                            <td><strong>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
+                            <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-              {isExpanded && (
-                <div style={{ padding: '0 0 8px' }}>
-                  <table style={{ width: '100%' }}>
-                    <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
-                    <tbody>
-                      {items.map((p: any) => (
-                        <tr key={p.id}>
-                          <td>{p.productos?.nombre}</td>
-                          <td>{p.cantidad}</td>
-                          <td>{Number(p.precio).toFixed(2)} €</td>
-                          <td><strong>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
-                          <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            )
+          })}
+          {pedidos.length === 0 && (
+            <div className="card">
+              <div className="empty-state">
+                <Zap size={40} />
+                <p>No hay pedidos para esta fecha</p>
+                <span>Pulsa "Generar día completo" para crear los pedidos automáticos</span>
+              </div>
             </div>
-          )
-        })}
-        {pedidos.length === 0 && (
-          <div className="card">
-            <div className="empty-state">
-              <Zap size={40} />
-              <p>No hay pedidos para esta fecha</p>
-              <span>Pulsa "Generar día completo" para crear los pedidos automáticos</span>
+          )}
+        </div>
+      )}
+
+      {/* TAB: RESUMEN TOTAL ARTÍCULOS */}
+      {tab === 'resumen' && (
+        <div>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
+            💡 <strong>CASA*</strong> y <strong>PISTOLA*</strong> están sumadas en una sola línea aunque tengan precios distintos — son la misma barra.
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>📦 Total artículos a pedir — {fecha}</span>
+              <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '1.1rem' }}>{totalResumen} unidades</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Artículo</th>
+                    <th style={{ textAlign: 'center' }}>Unidades totales</th>
+                    <th style={{ textAlign: 'center' }}>% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumenArticulos.map((a, i) => (
+                    <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '' }}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {a.esAgrupado && <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>AGRUPADO</span>}
+                          <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)' }}>{a.nombre}</strong>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.4rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>
+                          {a.cantidad}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                          <div style={{ width: 80, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--gris)' }}>
+                            {totalResumen > 0 ? (a.cantidad / totalResumen * 100).toFixed(1) : 0}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {resumenArticulos.length === 0 && (
+                    <tr><td colSpan={3}>
+                      <div className="empty-state"><p>No hay pedidos para resumir</p></div>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Modal añadir manual */}
       {openManual && (
@@ -270,7 +387,8 @@ export default function Pedidos() {
               </div>
               <div className="input-group">
                 <label className="input-label">Cantidad</label>
-                <input className="input" type="number" min={1} value={formManual.cantidad} onChange={e => setFormManual(f => ({ ...f, cantidad: parseInt(e.target.value) || 1 }))} />
+                <input className="input" type="number" min={1} step={1} value={formManual.cantidad}
+                  onChange={e => setFormManual(f => ({ ...f, cantidad: parseInt(e.target.value) || 1 }))} />
               </div>
             </div>
             <div className="modal-footer">

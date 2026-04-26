@@ -9,6 +9,7 @@ interface ProductoPubli {
   precio: string
   categoria: string
   emoji: string
+  imagen?: string  // base64
 }
 
 interface Catalogo {
@@ -80,7 +81,20 @@ const CATALOGO_INICIAL: Catalogo[] = [
   }
 ]
 
-const empty: ProductoPubli = { id: '', nombre: '', precio: '', categoria: 'Pan', emoji: '🍞' }
+const IMAGEN_STORAGE = 'telepan_imagenes_prod'
+function getImagenes(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(IMAGEN_STORAGE) || '{}') } catch { return {} }
+}
+function saveImagen(prodId: string, b64: string) {
+  const imgs = getImagenes(); imgs[prodId] = b64
+  localStorage.setItem(IMAGEN_STORAGE, JSON.stringify(imgs))
+}
+function deleteImagen(prodId: string) {
+  const imgs = getImagenes(); delete imgs[prodId]
+  localStorage.setItem(IMAGEN_STORAGE, JSON.stringify(imgs))
+}
+
+const empty: ProductoPubli = { id: '', nombre: '', precio: '', categoria: 'Pan', emoji: '🍞', imagen: '' }
 
 export default function Publicidad() {
   const [catalogos, setCatalogos] = useState<Catalogo[]>(() => {
@@ -96,6 +110,7 @@ export default function Publicidad() {
   const [openNewCat, setOpenNewCat] = useState(false)
   const [newCatNombre, setNewCatNombre] = useState('')
   const [newCatSub, setNewCatSub] = useState('')
+  const [imagenes, setImagenes] = useState<Record<string,string>>(getImagenes)
 
   const save = (cats: Catalogo[]) => {
     setCatalogos(cats)
@@ -143,6 +158,23 @@ export default function Publicidad() {
     save([...catalogos, newCat])
     setCatActivo(newCat.id)
     setOpenNewCat(false); setNewCatNombre(''); setNewCatSub('')
+  }
+
+  const handleImagenProducto = (e: React.ChangeEvent<HTMLInputElement>, prodId: string) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const r = new FileReader()
+    r.onload = () => {
+      const b64 = r.result as string
+      saveImagen(prodId, b64)
+      setImagenes(getImagenes())
+    }
+    r.readAsDataURL(file)
+  }
+
+  const removeImagen = (prodId: string) => {
+    deleteImagen(prodId)
+    setImagenes(getImagenes())
   }
 
   const printCatalogo = () => {
@@ -232,12 +264,27 @@ export default function Publicidad() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8, marginBottom: 16 }}>
             {catActual.productos.map(p => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'white', borderRadius: 10, border: `1.5px solid ${catActual.color}33`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                <span style={{ fontSize: '1.3rem' }}>{p.emoji}</span>
+                {/* Imagen o emoji */}
+                <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  {imagenes[p.id]
+                    ? <img src={imagenes[p.id]} alt={p.nombre} style={{ width: 30, height: 30, borderRadius: 6, objectFit: 'cover' }} />
+                    : <span style={{ fontSize: '1.5rem' }}>{p.emoji}</span>
+                  }
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
                   <div style={{ fontFamily: 'Fredoka One', fontSize: '1rem', color: catActual.color }}>{p.precio}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 3, flexShrink: 0, alignItems: 'center' }}>
+                  <label title="Subir imagen" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <input type="file" accept="image/*" style={{ display: 'none' }}
+                      onChange={e => handleImagenProducto(e, p.id)} />
+                    <span style={{ fontSize: '0.9rem', padding: '3px 5px', borderRadius: 6, border: '1px solid #e0c9b0', background: 'white', cursor: 'pointer' }}>📷</span>
+                  </label>
+                  {imagenes[p.id] && (
+                    <button title="Quitar imagen" onClick={() => removeImagen(p.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#dc2626', padding: '2px 4px' }}>✕</button>
+                  )}
                   <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { setEditingProd(p); setFormProd({ ...p }); setOpenProd(true) }}><Edit2 size={12} /></button>
                   <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteProducto(p.id)}><Trash2 size={12} /></button>
                 </div>
@@ -270,7 +317,7 @@ export default function Publicidad() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                 {catActual.productos.slice(0, 12).map(p => (
                   <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: `1.5px solid ${catActual.color}`, borderRadius: 7, padding: '6px 8px' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }}>{p.emoji} {p.nombre}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', display:'flex', alignItems:'center', gap:4 }}>{imagenes[p.id] ? <img src={imagenes[p.id]} alt="" style={{width:18,height:18,borderRadius:4,objectFit:'cover'}} /> : p.emoji} {p.nombre}</span>
                     <span style={{ fontWeight: 900, color: catActual.color, fontSize: '0.85rem', marginLeft: 6, flexShrink: 0 }}>{p.precio}</span>
                   </div>
                 ))}

@@ -15,6 +15,7 @@ export default function Cobros() {
   const [facturas, setFacturas] = useState<any[]>([])
   const [filterPago, setFilterPago] = useState('all')
   const [filterEstado, setFilterEstado] = useState('all')
+  const [busqueda, setBusqueda] = useState('')
 
   const mesNum = String(parseInt(mes) + 1).padStart(2, '0')
 
@@ -45,6 +46,10 @@ export default function Cobros() {
     if (filterPago !== 'all' && pago !== filterPago) return false
     if (filterEstado === 'pagado' && !f.pagado) return false
     if (filterEstado === 'pendiente' && f.pagado) return false
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      if (!f.clientes?.nombre?.toLowerCase().includes(q) && !f.numero?.toLowerCase().includes(q)) return false
+    }
     return true
   })
 
@@ -64,6 +69,11 @@ export default function Cobros() {
             <option value="all">Todas las formas de pago</option>
             {FORMAS_PAGO.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)', fontSize: '0.9rem' }}>🔍</span>
+            <input className="input" placeholder="Buscar cliente..." value={busqueda}
+              onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34, width: 200 }} />
+          </div>
           <select className="select" style={{ width: 'auto' }} value={filterEstado} onChange={e => setFilterEstado(e.target.value)}>
             <option value="all">Todos los estados</option>
             <option value="pendiente">⏳ Pendientes</option>
