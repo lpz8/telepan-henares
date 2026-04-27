@@ -5,19 +5,22 @@ import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
 
 const FORMAS_PAGO = ['Efectivo', 'Transferencia', 'Domiciliación', 'Bizum']
-const POBLACIONES = ['SAN FERNANDO DE HENARES', 'ALOVERA', 'CHILOECHES', 'AZUQUECA DE HENARES', 'VILLANUEVA DE LA TORRE', 'LOS HUEROS/VILLALBILLA', 'MADRID', 'Otro']
+const POBLACIONES = ['LOS HUEROS/VILLALBILLA', 'AZUQUECA DE HENARES', 'BUENDIA', 'CHILOECHES', 'EL MAPA', 'LA CELADA', 'ALOVERA', 'QUER', 'SAN FERNANDO DE HENARES', 'VILLANUEVA DE LA TORRE', 'MADRID', 'Otro']
 
 const ZONA_BADGE: Record<string, string> = {
-  'SAN FERNANDO DE HENARES': 'badge-blue', 'ALOVERA': 'badge-green',
-  'CHILOECHES': 'badge-purple', 'AZUQUECA DE HENARES': 'badge-red',
-  'VILLANUEVA DE LA TORRE': 'badge-orange', 'LOS HUEROS/VILLALBILLA': 'badge-yellow',
+  'LOS HUEROS/VILLALBILLA': 'badge-yellow', 'AZUQUECA DE HENARES': 'badge-red',
+  'BUENDIA': 'badge-orange', 'CHILOECHES': 'badge-purple',
+  'EL MAPA': 'badge-blue', 'LA CELADA': 'badge-green',
+  'ALOVERA': 'badge-green', 'QUER': 'badge-gray',
+  'SAN FERNANDO DE HENARES': 'badge-blue', 'VILLANUEVA DE LA TORRE': 'badge-orange',
   'MADRID': 'badge-gray',
 }
 
 const ZONA_RANGOS: Record<string, [number, number]> = {
-  'SAN FERNANDO DE HENARES': [1, 34], 'LOS HUEROS/VILLALBILLA': [1, 34],
-  'ALOVERA': [35, 290], 'VILLANUEVA DE LA TORRE': [182, 250],
-  'AZUQUECA DE HENARES': [290, 399], 'CHILOECHES': [400, 599], 'MADRID': [1, 10],
+  'LOS HUEROS/VILLALBILLA': [100, 199], 'AZUQUECA DE HENARES': [200, 299],
+  'BUENDIA': [300, 349], 'CHILOECHES': [400, 449], 'EL MAPA': [450, 499],
+  'LA CELADA': [500, 549], 'ALOVERA': [550, 649], 'QUER': [650, 699],
+  'SAN FERNANDO DE HENARES': [1, 99], 'VILLANUEVA DE LA TORRE': [700, 799], 'MADRID': [800, 899],
 }
 
 const PIN_CUENTAS = 'Telepan8' // PIN para ver números de cuenta

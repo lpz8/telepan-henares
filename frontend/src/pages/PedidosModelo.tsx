@@ -8,8 +8,10 @@ const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 const DIAS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 const ZONA_ORDEN: Record<string, number> = {
-  'SAN FERNANDO DE HENARES': 1, 'ALOVERA': 2, 'AZUQUECA DE HENARES': 3,
-  'VILLANUEVA DE LA TORRE': 4, 'CHILOECHES': 5, 'LOS HUEROS/VILLALBILLA': 6, 'MADRID': 7,
+  'LOS HUEROS/VILLALBILLA': 1, 'AZUQUECA DE HENARES': 2, 'BUENDIA': 3,
+  'CHILOECHES': 4, 'EL MAPA': 5, 'LA CELADA': 6,
+  'ALOVERA': 7, 'QUER': 8, 'SAN FERNANDO DE HENARES': 9,
+  'VILLANUEVA DE LA TORRE': 10, 'MADRID': 11,
 }
 
 const FRECUENCIAS = [
