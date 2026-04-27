@@ -130,59 +130,34 @@ export default function Clientes() {
       const nuevoOrden = form.orden_ruta
 
       if (editing?.id) {
-        const ordenAnterior = editing.orden_ruta || 0
-        // Solo renumerar si cambió el número de ruta
-        if (nuevoOrden !== ordenAnterior) {
-          // Primero poner el cliente editado a un número temporal (9999) para no chocar
-          await supabase.from('clientes').update({ orden_ruta: 9999 }).eq('id', editing.id)
-          // Recargar lista actual sin el cliente editado
-          const { data: resto } = await supabase.from('clientes')
-            .select('id, orden_ruta').neq('id', editing.id).order('orden_ruta')
-          const lista = (resto || []).filter(c => c.orden_ruta !== 9999)
-          // Insertar hueco en la posición nueva
-          for (const c of lista) {
-            const or = c.orden_ruta || 0
-            if (or >= nuevoOrden) {
-              await supabase.from('clientes').update({ orden_ruta: or + 1 }).eq('id', c.id)
-            }
-          }
-          // Cerrar hueco donde estaba antes (solo los que quedaron por encima del hueco anterior)
-          const { data: resto2 } = await supabase.from('clientes')
-            .select('id, orden_ruta').neq('id', editing.id).order('orden_ruta')
-          const lista2 = (resto2 || []).filter(c => c.orden_ruta !== 9999)
-          // Renumerar todo limpio desde 1 para evitar duplicados residuales
-          lista2.sort((a, b) => (a.orden_ruta || 0) - (b.orden_ruta || 0))
-          let counter = 1
-          for (const c of lista2) {
-            if (counter === nuevoOrden) counter++ // dejar hueco para el editado
-            await supabase.from('clientes').update({ orden_ruta: counter }).eq('id', c.id)
-            counter++
-          }
-        }
+        // EDITAR — simplemente guardar los datos. Si quiere cambiar orden usa la pestaña Ruta
         await supabase.from('clientes').update({ ...dataToSave, orden_ruta: nuevoOrden }).eq('id', editing.id)
         if (numero_cuenta) saveCuenta(editing.id, numero_cuenta)
         else deleteCuenta(editing.id)
         globalToast('Cliente actualizado ✓')
       } else {
-        // Cliente NUEVO — hacer hueco en nuevoOrden y renumerar limpito
+        // CREAR NUEVO — desplazar los que tienen orden >= nuevoOrden (del mayor al menor para no chocar)
         const { data: todos } = await supabase.from('clientes')
-          .select('id, orden_ruta').order('orden_ruta')
-        const lista = (todos || [])
-        lista.sort((a, b) => (a.orden_ruta || 0) - (b.orden_ruta || 0))
-        // Desplazar hacia arriba todos los que tienen orden >= nuevoOrden
-        // Recorrer al revés para no chocar
-        const aDesplazar = lista.filter(c => (c.orden_ruta || 0) >= nuevoOrden)
-          .sort((a, b) => (b.orden_ruta || 0) - (a.orden_ruta || 0))
-        for (const c of aDesplazar) {
-          await supabase.from('clientes').update({ orden_ruta: (c.orden_ruta || 0) + 1 }).eq('id', c.id)
+          .select('id, orden_ruta')
+          .gte('orden_ruta', nuevoOrden)
+          .order('orden_ruta', { ascending: false })
+
+        for (const c of (todos || [])) {
+          await supabase.from('clientes')
+            .update({ orden_ruta: (c.orden_ruta || 0) + 1 })
+            .eq('id', c.id)
         }
-        const { data: nuevo } = await supabase.from('clientes')
-          .insert({ ...dataToSave, user_id: user.id }).select().single()
+
+        const { data: nuevo, error } = await supabase.from('clientes')
+          .insert({ ...dataToSave, user_id: user.id, orden_ruta: nuevoOrden })
+          .select().single()
+
+        if (error) { globalToast('Error al crear cliente: ' + error.message, 'error'); return }
         if (nuevo && numero_cuenta) saveCuenta(nuevo.id, numero_cuenta)
         globalToast('Cliente creado ✓')
       }
       setOpen(false); setEditing(null); setForm(emptyForm); load()
-    } catch (err: any) { globalToast(err.message, 'error') }
+    } catch (err: any) { globalToast('Error: ' + err.message, 'error') }
   }
 
   const handleDelete = async (id: string) => {
