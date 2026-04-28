@@ -1,557 +1,823 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, Edit2, Trash2, X, ArrowUp, ArrowDown, Eye, EyeOff, Lock } from 'lucide-react'
+import { Plus, Trash2, X, Save, ChevronDown, ChevronUp, Calendar, AlertTriangle, Edit2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
 
-const FORMAS_PAGO = ['Efectivo', 'Transferencia', 'Domiciliación', 'Bizum']
-const POBLACIONES = ['LOS HUEROS/VILLALBILLA', 'AZUQUECA DE HENARES', 'BUENDIA', 'CHILOECHES', 'EL MAPA', 'LA CELADA', 'ALOVERA', 'QUER', 'SAN FERNANDO DE HENARES', 'VILLANUEVA DE LA TORRE', 'MADRID', 'Otro']
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DIAS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
-const ZONA_BADGE: Record<string, string> = {
-  'LOS HUEROS/VILLALBILLA': 'badge-yellow', 'AZUQUECA DE HENARES': 'badge-red',
-  'BUENDIA': 'badge-orange', 'CHILOECHES': 'badge-purple',
-  'EL MAPA': 'badge-blue', 'LA CELADA': 'badge-green',
-  'ALOVERA': 'badge-green', 'QUER': 'badge-gray',
-  'SAN FERNANDO DE HENARES': 'badge-blue', 'VILLANUEVA DE LA TORRE': 'badge-orange',
-  'MADRID': 'badge-gray',
+const ZONA_ORDEN: Record<string, number> = {
+  'LOS HUEROS/VILLALBILLA': 1, 'AZUQUECA DE HENARES': 2, 'BUENDIA': 3,
+  'CHILOECHES': 4, 'EL MAPA': 5, 'LA CELADA': 6,
+  'ALOVERA': 7, 'QUER': 8, 'SAN FERNANDO DE HENARES': 9,
+  'VILLANUEVA DE LA TORRE': 10, 'MADRID': 11,
 }
 
-const ZONA_RANGOS: Record<string, [number, number]> = {
-  'LOS HUEROS/VILLALBILLA': [100, 199], 'AZUQUECA DE HENARES': [200, 299],
-  'BUENDIA': [300, 349], 'CHILOECHES': [400, 449], 'EL MAPA': [450, 499],
-  'LA CELADA': [500, 549], 'ALOVERA': [550, 649], 'QUER': [650, 699],
-  'SAN FERNANDO DE HENARES': [1, 99], 'VILLANUEVA DE LA TORRE': [700, 799], 'MADRID': [800, 899],
+const FRECUENCIAS = [
+  { value: 'todos', label: '📅 Todos los días' },
+  { value: 'si_no', label: '🔄 Día sí, día no' },
+  { value: 'semanas_impares', label: '1️⃣ Semanas impares' },
+  { value: 'semanas_pares', label: '2️⃣ Semanas pares' },
+]
+
+const FREC_BADGE: Record<string, { label: string; color: string }> = {
+  'todos': { label: 'Diario', color: '#16a34a' },
+  'si_no': { label: 'Día sí/no', color: '#E8670A' },
+  'semanas_impares': { label: 'Sem. impares', color: '#7c3aed' },
+  'semanas_pares': { label: 'Sem. pares', color: '#2563eb' },
 }
 
-const PIN_CUENTAS = 'Telepan8' // PIN para ver números de cuenta
-const CUENTA_STORAGE = 'telepan_cuentas_v1'
-
-const emptyForm = {
-  codigo: '', nombre: '', direccion: '', codigo_postal: '',
-  poblacion: 'SAN FERNANDO DE HENARES', provincia: 'GUADALAJARA',
-  telefono1: '', telefono2: '', forma_pago: 'Efectivo',
-  es_alterno: false, observaciones: '', orden_ruta: 0, numero_cuenta: ''
+interface LineaForm {
+  producto_id: string
+  dias: number[]
+  cantidad: number
+  frecuencia: string
+  descuento: number
 }
 
-// Cuentas guardadas en localStorage cifradas (solo visibles con PIN)
-function getCuentas(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(CUENTA_STORAGE) || '{}') } catch { return {} }
-}
-function saveCuenta(clienteId: string, cuenta: string) {
-  const cuentas = getCuentas()
-  cuentas[clienteId] = cuenta
-  localStorage.setItem(CUENTA_STORAGE, JSON.stringify(cuentas))
-}
-function deleteCuenta(clienteId: string) {
-  const cuentas = getCuentas()
-  delete cuentas[clienteId]
-  localStorage.setItem(CUENTA_STORAGE, JSON.stringify(cuentas))
+interface LineaEdit extends LineaForm {
+  ids: string[]
 }
 
-export default function Clientes() {
+export default function PedidosModelo() {
   const { user } = useAuth()
   const [clientes, setClientes] = useState<any[]>([])
-  const [deudas, setDeudas] = useState<Record<string, number>>({})
-  const [soloDeudores, setSoloDeudores] = useState(false)
-  const [search, setSearch] = useState('')
-  const [filterPoblacion, setFilterPoblacion] = useState('all')
-  const [filterPago, setFilterPago] = useState('all')
-  const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [form, setForm] = useState(emptyForm)
-  const [tab, setTab] = useState<'lista' | 'ruta'>('lista')
+  const [productos, setProductos] = useState<any[]>([])
+  const [modelos, setModelos] = useState<any[]>([])
+  const [suspensiones, setSuspensiones] = useState<any[]>([])
+  const [diaFiltro, setDiaFiltro] = useState<number | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [busqueda, setBusqueda] = useState('')
+  const [tabActiva, setTabActiva] = useState<'habituales' | 'resumen'>('habituales')
 
-  // Historial
-  const [historialCliente, setHistorialCliente] = useState<any>(null)
-  const [historialPedidos, setHistorialPedidos] = useState<any[]>([])
-  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  // Modal añadir
+  const [openAdd, setOpenAdd] = useState(false)
+  const [formCliente, setFormCliente] = useState('')
+  const [formLineas, setFormLineas] = useState<LineaForm[]>([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])
 
-  // PIN para cuentas bancarias
-  const [pinVisible, setPinVisible] = useState(false)
-  const [pinInput, setPinInput] = useState('')
-  const [pinDesbloqueado, setPinDesbloqueado] = useState(false)
-  const [cuentasVisibles, setCuentasVisibles] = useState<Set<string>>(new Set())
-  const [clientePinId, setClientePinId] = useState<string | null>(null)
+  // Modal editar
+  const [openEdit, setOpenEdit] = useState(false)
+  const [editClienteId, setEditClienteId] = useState('')
+  const [editClienteNombre, setEditClienteNombre] = useState('')
+  const [editLineas, setEditLineas] = useState<LineaEdit[]>([])
+
+  // Modal suspensión
+  const [openSusp, setOpenSusp] = useState(false)
+  const [suspCId, setSuspCId] = useState('')
+  const [suspCNombre, setSuspCNombre] = useState('')
+  const [suspInicio, setSuspInicio] = useState('')
+  const [suspFin, setSuspFin] = useState('')
+  const [suspMotivo, setSuspMotivo] = useState('Vacaciones')
+
+  // Orden y drag
+  const [ordenManual, setOrdenManual] = useState<string[]>([])
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+
+  // Modal duplicar
+  const [openDuplicar, setOpenDuplicar] = useState(false)
+  const [duplicarDesde, setDuplicarDesde] = useState('')
+  const [duplicarHasta, setDuplicarHasta] = useState('')
+
+  const today = new Date().toISOString().split('T')[0]
 
   const load = async () => {
-    const { data } = await supabase.from('clientes').select('*').order('orden_ruta').order('codigo')
-    if (data) setClientes(data)
-    const { data: factPend } = await supabase.from('facturas').select('cliente_id, total').eq('pagado', false)
-    const deudasMap: Record<string, number> = {}
-    ;(factPend || []).forEach((f: any) => { deudasMap[f.cliente_id] = (deudasMap[f.cliente_id] || 0) + Number(f.total) })
-    setDeudas(deudasMap)
+    const [c, p, m, s] = await Promise.all([
+      supabase.from('clientes').select('*').order('orden_ruta').order('codigo'),
+      supabase.from('productos').select('*').order('nombre'),
+      supabase.from('pedidos_modelo').select('*, clientes(nombre,codigo,poblacion,orden_ruta), productos(nombre,precio_sin_iva)'),
+      supabase.from('suspensiones_pedido').select('*').gte('fecha_fin', today),
+    ])
+    if (c.data) setClientes(c.data)
+    if (p.data) setProductos(p.data)
+    if (m.data) setModelos(m.data)
+    if (s.data) setSuspensiones(s.data)
   }
-
   useEffect(() => { load() }, [])
 
-  const f = (k: string, v: any) => setForm(prev => ({ ...prev, [k]: v }))
+  const getSusp = (cId: string) => suspensiones.find(s => s.cliente_id === cId && s.fecha_inicio <= today && s.fecha_fin >= today)
 
-  const nextCodigo = (poblacion: string) => {
-    const rango = ZONA_RANGOS[poblacion]
-    if (!rango) return ''
-    const used = clientes.map(c => parseInt(c.codigo || '0')).filter(n => !isNaN(n))
-    for (let i = rango[0]; i <= rango[1]; i++) { if (!used.includes(i)) return String(i) }
-    return ''
-  }
+  const byCliente = clientes.reduce((acc: Record<string, any>, c) => {
+    const cms = modelos.filter(m => m.cliente_id === c.id)
+    const filtered = diaFiltro !== null ? cms.filter(m => m.dia_semana === diaFiltro) : cms
+    if (filtered.length > 0) acc[c.id] = { cliente: c, items: filtered }
+    return acc
+  }, {})
 
-  const nextOrdenRuta = (poblacion: string) => {
-    const zonaClientes = clientes.filter(c => c.poblacion === poblacion)
-    if (zonaClientes.length === 0) {
-      const maxOrden = clientes.length > 0 ? Math.max(...clientes.map(c => c.orden_ruta || 0)) : 0
-      return maxOrden + 1
+  const allClientIds = Object.keys(byCliente)
+
+  const sorted = (() => {
+    let entries: [string, any][]
+    if (ordenManual.length > 0) {
+      const ordered = ordenManual.filter(id => allClientIds.includes(id))
+      const rest = allClientIds.filter(id => !ordered.includes(id))
+      entries = [...ordered, ...rest].map(id => [id, byCliente[id]] as [string, any])
+    } else {
+      entries = Object.entries(byCliente).sort(([, a]: any, [, b]: any) => {
+        const za = ZONA_ORDEN[a.cliente.poblacion] || 99
+        const zb = ZONA_ORDEN[b.cliente.poblacion] || 99
+        if (za !== zb) return za - zb
+        return (a.cliente.orden_ruta || 999) - (b.cliente.orden_ruta || 999)
+      })
     }
-    return Math.max(...zonaClientes.map(c => c.orden_ruta || 0)) + 1
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      entries = entries.filter(([, { cliente }]) =>
+        cliente.nombre?.toLowerCase().includes(q) ||
+        String(cliente.codigo)?.includes(q) ||
+        cliente.poblacion?.toLowerCase().includes(q)
+      )
+    }
+    return entries
+  })()
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return
+    const ids = sorted.map(([id]) => id)
+    const newIds = [...ids]; [newIds[idx-1], newIds[idx]] = [newIds[idx], newIds[idx-1]]
+    setOrdenManual(newIds)
   }
 
-  const openNew = () => {
-    const codigo = nextCodigo(emptyForm.poblacion)
-    const orden = nextOrdenRuta(emptyForm.poblacion)
-    setEditing(null); setForm({ ...emptyForm, codigo, orden_ruta: orden }); setOpen(true)
+  const moveDown = (idx: number) => {
+    if (idx === sorted.length - 1) return
+    const ids = sorted.map(([id]) => id)
+    const newIds = [...ids]; [newIds[idx], newIds[idx+1]] = [newIds[idx+1], newIds[idx]]
+    setOrdenManual(newIds)
   }
 
-  const openEdit = (c: any) => {
-    setEditing(c)
-    const cuentas = getCuentas()
-    setForm({
-      codigo: c.codigo || '', nombre: c.nombre || '', direccion: c.direccion || '',
-      codigo_postal: c.codigo_postal || '', poblacion: c.poblacion || '',
-      provincia: c.provincia || 'GUADALAJARA', telefono1: c.telefono1 || '',
-      telefono2: c.telefono2 || '', forma_pago: c.forma_pago || 'Efectivo',
-      es_alterno: c.es_alterno || false, observaciones: c.observaciones || '',
-      orden_ruta: c.orden_ruta || 0, numero_cuenta: cuentas[c.id] || ''
-    })
-    setOpen(true)
+  const ordenarPorRuta = () => {
+    const ids = Object.entries(byCliente)
+      .sort(([, a]: any, [, b]: any) => (a.cliente.orden_ruta || 999) - (b.cliente.orden_ruta || 999))
+      .map(([id]) => id)
+    setOrdenManual(ids)
+    globalToast('✅ Ordenado por ruta — pulsa "Guardar orden" para confirmar')
   }
 
-  const handleSave = async () => {
-    if (!user || !form.nombre.trim()) return globalToast('El nombre es obligatorio', 'error')
+  const saveOrden = async () => {
+    if (ordenManual.length === 0) return
     try {
-      const { numero_cuenta, ...dataToSave } = form
-      const nuevoOrden = form.orden_ruta
-
-      if (editing?.id) {
-        // EDITAR — simplemente guardar los datos. Si quiere cambiar orden usa la pestaña Ruta
-        await supabase.from('clientes').update({ ...dataToSave, orden_ruta: nuevoOrden }).eq('id', editing.id)
-        if (numero_cuenta) saveCuenta(editing.id, numero_cuenta)
-        else deleteCuenta(editing.id)
-        globalToast('Cliente actualizado ✓')
-      } else {
-        // CREAR NUEVO — desplazar los que tienen orden >= nuevoOrden (del mayor al menor para no chocar)
-        const { data: todos } = await supabase.from('clientes')
-          .select('id, orden_ruta')
-          .gte('orden_ruta', nuevoOrden)
-          .order('orden_ruta', { ascending: false })
-
-        for (const c of (todos || [])) {
-          await supabase.from('clientes')
-            .update({ orden_ruta: (c.orden_ruta || 0) + 1 })
-            .eq('id', c.id)
-        }
-
-        const { data: nuevo, error } = await supabase.from('clientes')
-          .insert({ ...dataToSave, user_id: user.id, orden_ruta: nuevoOrden })
-          .select().single()
-
-        if (error) { globalToast('Error al crear cliente: ' + error.message, 'error'); return }
-        if (nuevo && numero_cuenta) saveCuenta(nuevo.id, numero_cuenta)
-        globalToast('Cliente creado ✓')
+      for (let i = 0; i < ordenManual.length; i++) {
+        await supabase.from('clientes').update({ orden_ruta: i + 1 }).eq('id', ordenManual[i])
       }
-      setOpen(false); setEditing(null); setForm(emptyForm); load()
-    } catch (err: any) { globalToast('Error: ' + err.message, 'error') }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este cliente?')) return
-    try {
-      const { data: cDel } = await supabase.from('clientes').select('orden_ruta').eq('id', id).single()
-      const ordenActual = cDel?.orden_ruta || 0
-      await supabase.from('pedidos_modelo').delete().eq('cliente_id', id)
-      await supabase.from('suspensiones_pedido').delete().eq('cliente_id', id)
-      await supabase.from('clientes').delete().eq('id', id)
-      deleteCuenta(id)
-      if (ordenActual > 0) {
-        const { data: rest } = await supabase.from('clientes').select('id, orden_ruta').gt('orden_ruta', ordenActual).order('orden_ruta')
-        if (rest) for (const c of rest) await supabase.from('clientes').update({ orden_ruta: (c.orden_ruta || 1) - 1 }).eq('id', c.id)
-      }
-      globalToast('✅ Cliente eliminado'); load()
+      globalToast('✅ Orden de ruta guardado')
+      setOrdenManual([])
+      load()
     } catch (err: any) { globalToast(err.message, 'error') }
   }
 
-  const moveRuta = async (idx: number, dir: -1 | 1) => {
-    const rutaList = [...clientes].sort((a, b) => (a.orden_ruta || 0) - (b.orden_ruta || 0))
-    const target = idx + dir
-    if (target < 0 || target >= rutaList.length) return
-    const a = rutaList[idx], b = rutaList[target]
-    await supabase.from('clientes').update({ orden_ruta: b.orden_ruta }).eq('id', a.id)
-    await supabase.from('clientes').update({ orden_ruta: a.orden_ruta }).eq('id', b.id)
+  const handleDragStart = (idx: number) => setDragIndex(idx)
+  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOver(idx) }
+  const handleDrop = (idx: number) => {
+    if (dragIndex === null || dragIndex === idx) { setDragIndex(null); setDragOver(null); return }
+    const ids = sorted.map(([id]) => id)
+    const newIds = [...ids]
+    const [moved] = newIds.splice(dragIndex, 1)
+    newIds.splice(idx, 0, moved)
+    setOrdenManual(newIds)
+    setDragIndex(null); setDragOver(null)
+  }
+
+  // Resumen artículos — CASA* y PISTOLA* agrupados
+  const resumenArticulos = (() => {
+    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean }> = {}
+    modelos.forEach(m => {
+      const prod = productos.find(p => p.id === m.producto_id)
+      const nombre: string = prod?.nombre || 'Desconocido'
+      const cantidad = Number(m.cantidad)
+      const up = nombre.toUpperCase().trim()
+      if (up.startsWith('CASA')) {
+        if (!totales['__CASA__']) totales['__CASA__'] = { nombre: 'BARRA CASA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__CASA__'].cantidad += cantidad
+      } else if (up.startsWith('PISTOLA')) {
+        if (!totales['__PISTOLA__']) totales['__PISTOLA__'] = { nombre: 'BARRA PISTOLA (todas)', cantidad: 0, esAgrupado: true }
+        totales['__PISTOLA__'].cantidad += cantidad
+      } else {
+        const key = up
+        if (!totales[key]) totales[key] = { nombre, cantidad: 0 }
+        totales[key].cantidad += cantidad
+      }
+    })
+    return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
+  })()
+  const totalResumen = resumenArticulos.reduce((s, a) => s + a.cantidad, 0)
+
+  const agruparLineas = (items: any[]): LineaEdit[] => {
+    const byKey: Record<string, LineaEdit> = {}
+    items.forEach((m: any) => {
+      const key = `${m.producto_id}_${m.frecuencia || 'todos'}_${m.cantidad}_${m.descuento || 0}`
+      if (!byKey[key]) byKey[key] = { producto_id: m.producto_id, dias: [], cantidad: m.cantidad, frecuencia: m.frecuencia || 'todos', descuento: m.descuento || 0, ids: [] }
+      byKey[key].dias.push(m.dia_semana)
+      byKey[key].ids.push(m.id)
+    })
+    return Object.values(byKey)
+  }
+
+  const abrirEdicion = (cId: string, cNombre: string, items: any[]) => {
+    setEditClienteId(cId); setEditClienteNombre(cNombre)
+    setEditLineas(agruparLineas(items)); setOpenEdit(true)
+  }
+
+  const guardarEdicion = async () => {
+    if (!user || !editClienteId) return
+    const { error: delErr } = await supabase.from('pedidos_modelo').delete().eq('cliente_id', editClienteId).eq('user_id', user.id)
+    if (delErr) return globalToast('Error al borrar: ' + delErr.message, 'error')
+    const validas = editLineas.filter(l => l.producto_id && l.dias.length > 0 && l.cantidad > 0)
+    if (validas.length > 0) {
+      const inserts: any[] = []
+      validas.forEach(l => l.dias.forEach(dia => inserts.push({
+        user_id: user.id, cliente_id: editClienteId, producto_id: l.producto_id,
+        dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0
+      })))
+      const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
+      if (insErr) {
+        console.error('Error inserting edited pedidos_modelo:', insErr)
+        return globalToast('Error al guardar: ' + insErr.message, 'error')
+      }
+    }
+    globalToast(`✅ Habituales de ${editClienteNombre} actualizados`)
+    setOpenEdit(false); load()
+  }
+
+  const editLineaField = (i: number, campo: string, val: any) =>
+    setEditLineas(prev => prev.map((l, j) => j === i ? { ...l, [campo]: val } : l))
+
+  const toggleDiaEdit = (lineaIdx: number, dia: number) => {
+    setEditLineas(prev => prev.map((l, i) => {
+      if (i !== lineaIdx) return l
+      const dias = l.dias.includes(dia) ? l.dias.filter(d => d !== dia) : [...l.dias, dia]
+      return { ...l, dias }
+    }))
+  }
+
+  const selectAllDias = (lineaIdx: number, all: boolean) =>
+    setEditLineas(prev => prev.map((l, i) => i !== lineaIdx ? l : { ...l, dias: all ? [0,1,2,3,4,5,6] : [] }))
+
+  const toggleDiaAdd = (lineaIdx: number, dia: number) => {
+    setFormLineas(prev => prev.map((l, i) => {
+      if (i !== lineaIdx) return l
+      const dias = l.dias.includes(dia) ? l.dias.filter(d => d !== dia) : [...l.dias, dia]
+      return { ...l, dias }
+    }))
+  }
+
+  const selectAllDiasAdd = (lineaIdx: number, all: boolean) =>
+    setFormLineas(prev => prev.map((l, i) => i !== lineaIdx ? l : { ...l, dias: all ? [0,1,2,3,4,5,6] : [] }))
+
+  const handleAdd = async () => {
+    if (!user || !formCliente) return globalToast('Selecciona un cliente', 'error')
+    const validas = formLineas.filter(l => l.producto_id && l.dias.length > 0 && l.cantidad > 0)
+    if (!validas.length) return globalToast('Añade al menos un producto con días', 'error')
+    const existentes = modelos.filter(m => m.cliente_id === formCliente)
+    if (existentes.length > 0) {
+      const clienteNombre = clientes.find(c => c.id === formCliente)?.nombre || ''
+      const resp = confirm(`⚠️ ${clienteNombre} ya tiene ${existentes.length} pedido(s) habitual(es).\n\n- Aceptar = SUSTITUIR los existentes\n- Cancelar = No hacer nada`)
+      if (!resp) return
+      const { error: delErr } = await supabase.from('pedidos_modelo').delete().eq('cliente_id', formCliente).eq('user_id', user.id)
+      if (delErr) return globalToast('Error al borrar habituales: ' + delErr.message, 'error')
+    }
+    const inserts: any[] = []
+    validas.forEach(l => l.dias.forEach(dia => inserts.push({
+      user_id: user.id, cliente_id: formCliente, producto_id: l.producto_id,
+      dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos',
+      descuento: l.descuento || 0
+    })))
+    const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
+    if (insErr) {
+      console.error('Error inserting pedidos_modelo:', insErr)
+      return globalToast('Error al guardar: ' + insErr.message, 'error')
+    }
+    globalToast(`✅ ${inserts.length} habituales guardados`)
+    setOpenAdd(false); setFormCliente('')
+    setFormLineas([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])
     load()
   }
 
-  const verHistorial = async (c: any) => {
-    setHistorialCliente(c); setLoadingHistorial(true)
-    const { data } = await supabase.from('pedidos')
-      .select('fecha, cantidad, precio, iva, productos(nombre)')
-      .eq('cliente_id', c.id).order('fecha', { ascending: false }).limit(200)
-    setHistorialPedidos(data || []); setLoadingHistorial(false)
+  const deleteAll = async (cId: string, nombre: string) => {
+    if (!confirm(`¿Eliminar TODOS los habituales de ${nombre}?`)) return
+    await supabase.from('pedidos_modelo').delete().eq('cliente_id', cId)
+    globalToast(`✅ Habituales de ${nombre} eliminados`); load()
   }
 
-  // PIN para ver número de cuenta
-  const pedirPin = (clienteId: string) => {
-    setClientePinId(clienteId); setPinInput(''); setPinVisible(true)
+  const handleSusp = async () => {
+    if (!user || !suspCId || !suspInicio || !suspFin) return globalToast('Rellena todos los campos', 'error')
+    if (suspFin < suspInicio) return globalToast('La fecha fin debe ser posterior', 'error')
+    await supabase.from('suspensiones_pedido').insert({ user_id: user.id, cliente_id: suspCId, fecha_inicio: suspInicio, fecha_fin: suspFin, motivo: suspMotivo })
+    globalToast('✅ Suspensión guardada'); setOpenSusp(false); setSuspCId(''); setSuspInicio(''); setSuspFin(''); load()
   }
 
-  const verificarPin = () => {
-    if (pinInput === PIN_CUENTAS) {
-      setPinDesbloqueado(true)
-      if (clientePinId) {
-        setCuentasVisibles(prev => new Set([...prev, clientePinId]))
-      }
-      setPinVisible(false); setPinInput('')
-      globalToast('✅ Acceso autorizado')
-    } else {
-      globalToast('❌ PIN incorrecto', 'error')
-      setPinInput('')
-    }
+  const deleteSusp = async (cId: string) => {
+    await supabase.from('suspensiones_pedido').delete().eq('cliente_id', cId).gte('fecha_fin', today)
+    globalToast('✅ Pedidos reanudados'); load()
   }
 
-  const filtered = clientes.filter(c => {
-    if (search && !c.nombre?.toLowerCase().includes(search.toLowerCase()) &&
-      !c.codigo?.toString().includes(search) &&
-      !c.direccion?.toLowerCase().includes(search.toLowerCase()) &&
-      !c.telefono1?.includes(search)) return false
-    if (filterPoblacion !== 'all' && c.poblacion !== filterPoblacion) return false
-    if (filterPago !== 'all' && c.forma_pago !== filterPago) return false
-    if (soloDeudores && !(deudas[c.id] > 0)) return false
-    return true
-  })
+  const handleDuplicar = async () => {
+    if (!user || !duplicarDesde || !duplicarHasta) return globalToast('Selecciona los dos clientes', 'error')
+    if (duplicarDesde === duplicarHasta) return globalToast('Los clientes deben ser distintos', 'error')
+    const { data: orig } = await supabase.from('pedidos_modelo').select('*').eq('cliente_id', duplicarDesde).eq('user_id', user.id)
+    if (!orig || orig.length === 0) return globalToast('El cliente origen no tiene habituales', 'error')
+    const inserts = orig.map(m => ({
+      user_id: user.id, cliente_id: duplicarHasta, producto_id: m.producto_id,
+      dia_semana: m.dia_semana, cantidad: m.cantidad, frecuencia: m.frecuencia || 'todos', descuento: m.descuento || 0
+    }))
+    await supabase.from('pedidos_modelo').delete().eq('cliente_id', duplicarHasta).eq('user_id', user.id)
+    await supabase.from('pedidos_modelo').insert(inserts)
+    globalToast(`✅ ${inserts.length} habituales copiados`)
+    setOpenDuplicar(false); setDuplicarDesde(''); setDuplicarHasta(''); load()
+  }
 
-  const rutaList = [...clientes].sort((a, b) => (a.orden_ruta || 0) - (b.orden_ruta || 0))
-  const cuentas = getCuentas()
+  const exportarHabituales = async () => {
+    const { data } = await supabase.from('pedidos_modelo')
+      .select('*, clientes(nombre,codigo,poblacion), productos(nombre,precio_sin_iva)')
+    if (!data) return globalToast('Error al exportar', 'error')
+    const backup = { fecha: new Date().toISOString(), pedidos_habituales: data }
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `habituales-telepan-${today}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    globalToast('✅ Habituales exportados')
+  }
+
+  const importarHabituales = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    if (!confirm('⚠️ Esto REEMPLAZARÁ todos los habituales actuales. ¿Continuar?')) return
+    try {
+      const backup = JSON.parse(await file.text())
+      const datos = backup.pedidos_habituales || backup
+      if (!Array.isArray(datos)) throw new Error('Formato no válido')
+      await supabase.from('pedidos_modelo').delete().eq('user_id', user.id)
+      const inserts = datos.map((m: any) => ({
+        user_id: user.id, cliente_id: m.cliente_id, producto_id: m.producto_id,
+        dia_semana: m.dia_semana, cantidad: m.cantidad, frecuencia: m.frecuencia || 'todos', descuento: m.descuento || 0
+      }))
+      await supabase.from('pedidos_modelo').insert(inserts)
+      globalToast(`✅ ${inserts.length} habituales importados`)
+      load()
+    } catch (err: any) { globalToast('Error: ' + err.message, 'error') }
+    e.target.value = ''
+  }
+
+  const renderLinea = (
+    linea: LineaForm | LineaEdit, i: number,
+    onChange: (i: number, k: string, v: any) => void,
+    onToggle: (i: number, d: number) => void,
+    onSelectAll: (i: number, all: boolean) => void,
+    onRemove: (i: number) => void,
+    total: number
+  ) => (
+    <div key={i} style={{ background: 'var(--crema)', borderRadius: 10, padding: '12px', marginBottom: 10, border: '1px solid #f5e8d8' }}>
+      <div className="form-grid-2" style={{ marginBottom: 8 }}>
+        <div className="input-group" style={{ marginBottom: 0 }}>
+          <label className="input-label">Producto</label>
+          <select className="select" value={linea.producto_id} onChange={e => onChange(i, 'producto_id', e.target.value)}>
+            <option value="">Seleccionar...</option>
+            {productos.map(p => <option key={p.id} value={p.id}>{p.nombre} — {Number(p.precio_sin_iva).toFixed(2)}€</option>)}
+          </select>
+        </div>
+        <div className="form-grid-2" style={{ marginBottom: 0 }}>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Cantidad</label>
+            <input className="input" type="number" min={1} step={1} value={linea.cantidad}
+              onChange={e => onChange(i, 'cantidad', Math.max(1, Math.round(parseFloat(e.target.value) || 1)))} />
+          </div>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Descuento %</label>
+            <input className="input" type="number" min={0} max={100} step={1} value={linea.descuento}
+              onChange={e => onChange(i, 'descuento', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+              placeholder="0" />
+          </div>
+        </div>
+      </div>
+      {linea.descuento > 0 && linea.producto_id && (() => {
+        const prod = productos.find(p => p.id === linea.producto_id)
+        const precioBase = Number(prod?.precio_sin_iva || 0)
+        const precioDto = precioBase * (1 - linea.descuento / 100)
+        return (
+          <div style={{ background: '#f0fdf4', borderRadius: 6, padding: '4px 10px', marginBottom: 8, fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
+            💰 Precio con {linea.descuento}% dto: {precioDto.toFixed(2)}€ (antes {precioBase.toFixed(2)}€)
+          </div>
+        )
+      })()}
+      <div className="input-group" style={{ marginBottom: 8 }}>
+        <label className="input-label">Frecuencia</label>
+        <select className="select" value={linea.frecuencia} onChange={e => onChange(i, 'frecuencia', e.target.value)}>
+          {FRECUENCIAS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <label className="input-label" style={{ margin: 0 }}>Días de reparto</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" onClick={() => onSelectAll(i, true)}
+            style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 6, border: '1px solid #e0c9b0', background: 'white', cursor: 'pointer', fontWeight: 700, color: '#16a34a' }}>
+            ✓ Todos
+          </button>
+          <button type="button" onClick={() => onSelectAll(i, false)}
+            style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 6, border: '1px solid #e0c9b0', background: 'white', cursor: 'pointer', fontWeight: 700, color: '#dc2626' }}>
+            ✗ Ninguno
+          </button>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        {DIAS.map((d, di) => (
+          <button key={di} type="button" onClick={() => onToggle(i, di)}
+            style={{ padding: '5px 9px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', border: 'none',
+              background: linea.dias.includes(di) ? 'var(--naranja)' : '#e5d8cc',
+              color: linea.dias.includes(di) ? 'white' : 'var(--gris)', transition: 'all 0.15s' }}>
+            {d}
+          </button>
+        ))}
+      </div>
+      {total > 1 && (
+        <button className="btn btn-danger btn-sm" style={{ marginTop: 8 }} onClick={() => onRemove(i)}>
+          <Trash2 size={12} /> Eliminar línea
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <div>
+      {/* ══ CABECERA ══ */}
       <div className="page-header">
-        <h1 className="page-title">👥 Clientes <span style={{ fontSize: '1rem', color: 'var(--gris)', fontWeight: 700 }}>({clientes.length})</span></h1>
+        <h1 className="page-title">📋 Pedidos Habituales
+          <span style={{ fontSize: '0.85rem', color: 'var(--gris)', fontFamily: 'Nunito', fontWeight: 700, marginLeft: 8 }}>
+            {sorted.length} clientes
+          </span>
+        </h1>
         <div className="page-actions">
-          <button className={`btn btn-sm ${soloDeudores ? 'btn-danger' : 'btn-secondary'}`} onClick={() => setSoloDeudores(!soloDeudores)}>
-            {soloDeudores ? '⚠️ Solo deudores' : '💰 Ver deudores'}
-          </button>
-          <div className="search-box">
-            <Search size={16} />
-            <input className="input" style={{ paddingLeft: 32, width: 180 }} placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <select className="select" style={{ width: 'auto' }} value={filterPoblacion} onChange={e => setFilterPoblacion(e.target.value)}>
-            <option value="all">Todas las zonas</option>
-            {POBLACIONES.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select className="select" style={{ width: 'auto' }} value={filterPago} onChange={e => setFilterPago(e.target.value)}>
-            <option value="all">Todos los pagos</option>
-            {FORMAS_PAGO.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Nuevo</button>
-        </div>
-      </div>
-
-      <div className="tabs">
-        <div className={`tab ${tab === 'lista' ? 'active' : ''}`} onClick={() => setTab('lista')}>📋 Lista de clientes</div>
-        <div className={`tab ${tab === 'ruta' ? 'active' : ''}`} onClick={() => setTab('ruta')}>🗺️ Orden de ruta</div>
-      </div>
-
-      {tab === 'lista' && (
-        <div className="card" style={{ padding: 0 }}>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Ruta</th><th>Cód.</th><th>Nombre</th><th>Zona</th><th>Pago</th><th>Teléfono</th><th>Deuda</th><th></th></tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => (
-                  <tr key={c.id}>
-                    <td><span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)' }}>#{c.orden_ruta}</span></td>
-                    <td><strong style={{ color: 'var(--marron)' }}>{c.codigo}</strong></td>
-                    <td>
-                      <div style={{ fontWeight: 700 }}>{c.nombre}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{c.direccion}</div>
-                      {c.es_alterno && <span className="badge badge-yellow">Alterno</span>}
-                      {c.observaciones && (
-                        <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#92400e', borderRadius: 5, padding: '1px 7px', fontWeight: 700, marginLeft: 4 }}>
-                          📝 {c.observaciones}
-                        </span>
-                      )}
-                      {/* Número de cuenta para domiciliados */}
-                      {c.forma_pago === 'Domiciliación' && cuentas[c.id] && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                          <Lock size={10} color="#ca8a04" />
-                          {cuentasVisibles.has(c.id) ? (
-                            <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: '#92400e', fontWeight: 700 }}>
-                              {cuentas[c.id]}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '0.72rem', color: '#ca8a04', fontWeight: 700 }}>
-                              IBAN: ••••••••••
-                            </span>
-                          )}
-                          <button onClick={() => cuentasVisibles.has(c.id)
-                            ? setCuentasVisibles(prev => { const n = new Set(prev); n.delete(c.id); return n })
-                            : pedirPin(c.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#ca8a04' }}>
-                            {cuentasVisibles.has(c.id) ? <EyeOff size={12} /> : <Eye size={12} />}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td><span className={`badge ${ZONA_BADGE[c.poblacion] || 'badge-gray'}`}>{c.poblacion}</span></td>
-                    <td>
-                      <span className={`badge ${c.forma_pago === 'Domiciliación' ? 'badge-yellow' : c.forma_pago === 'Efectivo' ? 'badge-green' : 'badge-blue'}`}>
-                        {c.forma_pago}
-                      </span>
-                    </td>
-                    <td>{c.telefono1}</td>
-                    <td>
-                      {deudas[c.id] > 0
-                        ? <span style={{ color: '#dc2626', fontWeight: 800, fontSize: '0.85rem' }}>💰 {deudas[c.id].toFixed(2)} €</span>
-                        : <span style={{ color: '#16a34a', fontSize: '0.8rem' }}>✅ Al día</span>}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(c)}><Edit2 size={14} /></button>
-                        <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(c.id)}><Trash2 size={14} /></button>
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver historial" onClick={() => verHistorial(c)}>📋</button>
-                        {/* WhatsApp — siempre visible, verde si tiene tel, gris si no */}
-                        <button
-                          title={c.telefono1 ? 'Enviar WhatsApp' : 'Sin teléfono registrado'}
-                          style={{ background: c.telefono1 ? '#25D366' : '#ccc', color: 'white', border: 'none', fontWeight: 800, fontSize: '0.72rem', padding: '4px 8px', borderRadius: 6, cursor: c.telefono1 ? 'pointer' : 'not-allowed' }}
-                          onClick={() => {
-                            if (!c.telefono1) return
-                            const tel = c.telefono1.replace(/\D/g, '')
-                            const msg = deudas[c.id] > 0
-                              ? encodeURIComponent(`Hola ${c.nombre}, le recordamos que tiene una deuda pendiente de ${deudas[c.id].toFixed(2)}€. Por favor contacte con nosotros. Gracias, TelePan Henares 🍞`)
-                              : encodeURIComponent(`Hola ${c.nombre}, le contactamos desde TelePan Henares. ¿En qué podemos ayudarle? 🍞`)
-                            window.open(`https://wa.me/34${tel}?text=${msg}`, '_blank')
-                          }}>
-                          📱
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8}><div className="empty-state"><p>No hay clientes</p></div></td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {tab === 'ruta' && (
-        <div>
-          <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 12, padding: '10px 16px', marginBottom: 12, fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700 }}>
-            🗺️ Reordena los clientes según el orden de tu ruta diaria.
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {rutaList.map((c, idx) => (
-              <div key={c.id} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--naranja)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fredoka One', flexShrink: 0 }}>
-                  {c.orden_ruta || idx + 1}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '0.85rem' }}>#{c.codigo}</span>
-                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</strong>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{c.poblacion} · {c.telefono1}</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moveRuta(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></button>
-                  <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moveRuta(idx, 1)} disabled={idx === rutaList.length - 1}><ArrowDown size={13} /></button>
-                </div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(c)}><Edit2 size={13} /></button>
-                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(c.id)}><Trash2 size={13} /></button>
-                </div>
-              </div>
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+            <button className={`btn btn-sm ${diaFiltro === null ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setDiaFiltro(null)}>Todos</button>
+            {DIAS_SHORT.map((d, i) => (
+              <button key={i} className={`btn btn-sm ${diaFiltro === i ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setDiaFiltro(i)}>{d}</button>
             ))}
           </div>
+          {ordenManual.length > 0 && (
+            <button className="btn btn-success btn-sm" onClick={saveOrden}><Save size={14} /> Guardar orden</button>
+          )}
+          <button className="btn btn-secondary btn-sm" onClick={ordenarPorRuta}>🗺️ Ordenar por ruta</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setOpenDuplicar(true)}>📋 Duplicar</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportarHabituales}><Download size={14} /> Backup</button>
+          <button className="btn btn-primary" onClick={() => setOpenAdd(true)}><Plus size={16} /> Añadir</button>
         </div>
-      )}
+      </div>
 
-      {/* MODAL CLIENTE */}
-      {open && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpen(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h3 className="modal-title">{editing ? '✏️ Editar Cliente' : '➕ Nuevo Cliente'}</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setOpen(false)}><X size={16} /></button>
+      {/* ══ BUSCADOR ══ */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+          <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }} />
+          <input className="input" placeholder="Buscar cliente..." value={busqueda}
+            onChange={e => setBusqueda(e.target.value)} style={{ paddingLeft: 34 }} />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.82rem', color: 'var(--gris)' }}>
+          <input type="file" accept=".json" style={{ display: 'none' }} onChange={importarHabituales} />
+          <span style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e0c9b0', background: 'white', fontWeight: 700 }}>📂 Importar backup</span>
+        </label>
+      </div>
+
+      {/* ══ TABS ══ */}
+      <div className="tabs-mobile-select">
+        <select value={tabActiva} onChange={e => setTabActiva(e.target.value as any)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '2px solid var(--naranja)', fontFamily: 'Nunito', fontWeight: 800, fontSize: '0.95rem', color: 'var(--marron)', background: '#fff8f0', marginBottom: 12 }}>
+          <option value="habituales">📋 Habituales ({sorted.length} clientes)</option>
+          <option value="resumen">📦 Resumen artículos ({totalResumen} ud)</option>
+        </select>
+      </div>
+      <div className="tabs-desktop">
+        <div className={`tab ${tabActiva === 'habituales' ? 'active' : ''}`} onClick={() => setTabActiva('habituales')}>
+          📋 Habituales ({sorted.length} clientes)
+        </div>
+        <div className={`tab ${tabActiva === 'resumen' ? 'active' : ''}`} onClick={() => setTabActiva('resumen')}>
+          📦 Resumen artículos ({totalResumen} ud)
+        </div>
+      </div>
+
+      {/* ══ TAB: RESUMEN ARTÍCULOS ══ */}
+      {tabActiva === 'resumen' && (
+        <div>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
+            💡 <strong>CASA*</strong> y <strong>PISTOLA*</strong> agrupadas en una sola línea — son la misma barra aunque tengan distintos precios.
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f5e8d8', fontFamily: 'Fredoka One', color: 'var(--marron)' }}>
+              📦 Total artículos en pedidos habituales
             </div>
-            <div className="modal-body">
-              <div className="form-grid-2">
-                <div className="input-group">
-                  <label className="input-label">Código</label>
-                  <input className="input" value={form.codigo} onChange={e => f('codigo', e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Nº en ruta</label>
-                  <input className="input" type="number" value={form.orden_ruta} onChange={e => f('orden_ruta', parseInt(e.target.value) || 0)} />
-                </div>
-              </div>
-              <div className="input-group">
-                <label className="input-label">Nombre *</label>
-                <input className="input" value={form.nombre} onChange={e => f('nombre', e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label className="input-label">Dirección</label>
-                <input className="input" value={form.direccion} onChange={e => f('direccion', e.target.value)} />
-              </div>
-              <div className="form-grid-2">
-                <div className="input-group">
-                  <label className="input-label">Código Postal</label>
-                  <input className="input" value={form.codigo_postal} onChange={e => f('codigo_postal', e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Provincia</label>
-                  <input className="input" value={form.provincia} onChange={e => f('provincia', e.target.value)} />
-                </div>
-              </div>
-              <div className="input-group">
-                <label className="input-label">Zona / Población</label>
-                <select className="select" value={form.poblacion} onChange={e => {
-                  const p = e.target.value; f('poblacion', p)
-                  if (!editing) { f('codigo', nextCodigo(p)); f('orden_ruta', nextOrdenRuta(p)) }
-                }}>
-                  {POBLACIONES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div className="form-grid-2">
-                <div className="input-group">
-                  <label className="input-label">Teléfono 1</label>
-                  <input className="input" value={form.telefono1} onChange={e => f('telefono1', e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Teléfono 2</label>
-                  <input className="input" value={form.telefono2} onChange={e => f('telefono2', e.target.value)} />
-                </div>
-              </div>
-              <div className="input-group">
-                <label className="input-label">Forma de pago</label>
-                <select className="select" value={form.forma_pago} onChange={e => f('forma_pago', e.target.value)}>
-                  {FORMAS_PAGO.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-
-              {/* NÚMERO DE CUENTA — solo para domiciliados */}
-              {form.forma_pago === 'Domiciliación' && (
-                <div className="input-group" style={{ background: '#fff8f0', border: '1.5px solid #f5e8d8', borderRadius: 10, padding: '10px 12px' }}>
-                  <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Lock size={13} color="#ca8a04" /> Número de cuenta (IBAN) — Solo visible con PIN
-                  </label>
-                  <input className="input" type="password" value={form.numero_cuenta}
-                    onChange={e => f('numero_cuenta', e.target.value)}
-                    placeholder="ES00 0000 0000 0000 0000 0000"
-                    autoComplete="off" />
-                  <p style={{ fontSize: '0.72rem', color: '#92400e', marginTop: 4 }}>
-                    🔒 Solo tú puedes verlo con el PIN de seguridad. No se sube a internet.
-                  </p>
-                </div>
-              )}
-
-              <div className="input-group">
-                <label className="input-label">Observaciones (visible en pedidos)</label>
-                <textarea className="textarea" rows={2} value={form.observaciones} onChange={e => f('observaciones', e.target.value)} />
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.es_alterno} onChange={e => f('es_alterno', e.target.checked)} />
-                <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>Cliente alterno</span>
-              </label>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setOpen(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSave}>{editing ? '💾 Guardar' : '✅ Crear'}</button>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Artículo</th>
+                    <th style={{ textAlign: 'center' }}>Unidades/día</th>
+                    <th style={{ textAlign: 'center' }}>% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumenArticulos.map((a, i) => (
+                    <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '' }}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {a.esAgrupado && (
+                            <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>
+                              AGRUPADO
+                            </span>
+                          )}
+                          <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)' }}>{a.nombre}</strong>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.4rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>
+                          {a.cantidad}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                          <div style={{ width: 80, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--gris)' }}>
+                            {totalResumen > 0 ? (a.cantidad / totalResumen * 100).toFixed(1) : 0}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {resumenArticulos.length === 0 && (
+                    <tr><td colSpan={3}>
+                      <div className="empty-state"><p>No hay habituales configurados</p></div>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL PIN */}
-      {pinVisible && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPinVisible(false)}>
-          <div className="modal" style={{ maxWidth: 320 }}>
+      {/* ══ TAB: HABITUALES ══ */}
+      {tabActiva === 'habituales' && (
+        <div>
+          {ordenManual.length > 0 && (
+            <div style={{ background: '#fff3e8', border: '1px solid #f5e8d8', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700 }}>
+              🔀 Modo reordenación activo. Arrastra o usa ↑↓ y pulsa "Guardar orden".
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sorted.map(([clienteId, { cliente, items }]: any, idx) => {
+              const isOpen = expanded.has(clienteId)
+              const susp = getSusp(clienteId)
+              const lineas = agruparLineas(items)
+
+              return (
+                <div key={clienteId} className="card"
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDrop={() => handleDrop(idx)}
+                  style={{
+                    padding: 0, overflow: 'hidden',
+                    border: dragOver === idx ? '2px solid var(--naranja)' : susp ? '2px solid #f59e0b' : '1px solid #f5e8d8',
+                    opacity: dragIndex === idx ? 0.5 : 1,
+                    cursor: 'grab', transition: 'all 0.15s'
+                  }}>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer', background: susp ? '#fffbeb' : isOpen ? 'var(--crema-dark)' : 'white' }}
+                    onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(clienteId) ? n.delete(clienteId) : n.add(clienteId); return n })}>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                        style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', padding: '1px 4px', color: idx === 0 ? '#ddd' : 'var(--naranja)', lineHeight: 1 }}>
+                        <ArrowUp size={14} />
+                      </button>
+                      <button onClick={() => moveDown(idx)} disabled={idx === sorted.length - 1}
+                        style={{ background: 'none', border: 'none', cursor: idx === sorted.length - 1 ? 'not-allowed' : 'pointer', padding: '1px 4px', color: idx === sorted.length - 1 ? '#ddd' : 'var(--naranja)', lineHeight: 1 }}>
+                        <ArrowDown size={14} />
+                      </button>
+                    </div>
+
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: susp ? '#f59e0b' : 'var(--naranja)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fredoka One', fontSize: '0.85rem', flexShrink: 0 }}>
+                      {susp ? '⏸' : cliente.orden_ruta || idx + 1}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)', fontSize: '0.82rem' }}>#{cliente.codigo}</span>
+                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.88rem' }}>{cliente.nombre}</strong>
+                        {susp && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 5, padding: '1px 6px', fontSize: '0.68rem', fontWeight: 800, flexShrink: 0 }}>⏸ hasta {susp.fecha_fin}</span>}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--gris)' }}>{cliente.poblacion} · {lineas.length} producto{lineas.length !== 1 ? 's' : ''}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                      {DIAS_SHORT.map((d, i) => {
+                        const activo = items.some((m: any) => m.dia_semana === i)
+                        return <span key={i} style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 800, background: activo ? (susp ? '#f59e0b' : 'var(--naranja)') : '#f3f4f6', color: activo ? 'white' : '#ccc' }}>{d[0]}</span>
+                      })}
+                    </div>
+                    <span style={{ color: 'var(--gris)' }}>{isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
+                  </div>
+
+                  {isOpen && (
+                    <div>
+                      <div style={{ padding: '8px 12px', display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #f5e8d8', borderBottom: '1px solid #f5e8d8', background: '#fafafa' }}>
+                        <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); abrirEdicion(clienteId, cliente.nombre, items) }}>
+                          <Edit2 size={12} /> Editar
+                        </button>
+                        {susp ? (
+                          <button className="btn btn-success btn-sm" onClick={() => deleteSusp(clienteId)}>✅ Reanudar</button>
+                        ) : (
+                          <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setSuspCId(clienteId); setSuspCNombre(cliente.nombre); setOpenSusp(true) }}>
+                            <Calendar size={12} /> Suspender
+                          </button>
+                        )}
+                        <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); deleteAll(clienteId, cliente.nombre) }}>
+                          <Trash2 size={12} /> Borrar todos
+                        </button>
+                      </div>
+                      <table style={{ width: '100%' }}>
+                        <thead><tr><th>Producto</th><th>Cant.</th><th>Descuento</th><th>Días</th><th>Frecuencia</th><th>€</th></tr></thead>
+                        <tbody>
+                          {lineas.map((l, pi) => {
+                            const badge = FREC_BADGE[l.frecuencia] || FREC_BADGE['todos']
+                            const prod = productos.find(p => p.id === l.producto_id)
+                            const precioFinal = prod ? Number(prod.precio_sin_iva) * (1 - (l.descuento || 0) / 100) : 0
+                            return (
+                              <tr key={pi}>
+                                <td><strong>{prod?.nombre || '—'}</strong></td>
+                                <td>{l.cantidad}</td>
+                                <td>{l.descuento > 0 ? <span style={{ color: '#16a34a', fontWeight: 800 }}>-{l.descuento}%</span> : '—'}</td>
+                                <td><div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>{l.dias.sort((a,b)=>a-b).map(d => <span key={d} style={{ background: 'var(--naranja)', color: 'white', borderRadius: 4, padding: '1px 5px', fontSize: '0.68rem', fontWeight: 800 }}>{DIAS_SHORT[d]}</span>)}</div></td>
+                                <td><span style={{ background: badge.color + '20', color: badge.color, borderRadius: 5, padding: '2px 6px', fontSize: '0.68rem', fontWeight: 800 }}>{badge.label}</span></td>
+                                <td style={{ fontSize: '0.82rem' }}>{prod ? `${precioFinal.toFixed(2)}€` : '—'}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {sorted.length === 0 && (
+              <div className="card">
+                <div className="empty-state">
+                  <span style={{ fontSize: 36 }}>📋</span>
+                  <p>{busqueda ? `Sin resultados para "${busqueda}"` : 'No hay pedidos habituales'}</p>
+                  <span>{!busqueda && 'Pulsa "Añadir" para configurar'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL EDITAR ══ */}
+      {openEdit && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenEdit(false)}>
+          <div className="modal" style={{ maxWidth: 660 }}>
             <div className="modal-header">
-              <h3 className="modal-title"><Lock size={16} /> Introduce el PIN</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setPinVisible(false)}><X size={16} /></button>
+              <h3 className="modal-title">✏️ Editar — {editClienteNombre}</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenEdit(false)}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: '0.85rem', color: 'var(--gris)', marginBottom: 12 }}>
-                🔒 El número de cuenta está protegido. Introduce el PIN para verlo.
-              </p>
-              <input className="input" type="password" placeholder="PIN de seguridad" value={pinInput}
-                onChange={e => setPinInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && verificarPin()}
-                autoFocus style={{ textAlign: 'center', fontSize: '1.2rem', letterSpacing: '0.2em' }} />
-              <p style={{ fontSize: '0.72rem', color: 'var(--gris)', marginTop: 8, textAlign: 'center' }}>
-                Introduce el PIN de 8 caracteres para desbloquear.
-              </p>
+              {editLineas.map((linea, i) => renderLinea(
+                linea, i, editLineaField, toggleDiaEdit, selectAllDias,
+                (idx) => setEditLineas(prev => prev.filter((_, j) => j !== idx)),
+                editLineas.length
+              ))}
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditLineas(prev => [...prev, { producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0, ids: [] }])}>
+                <Plus size={13} /> Añadir producto
+              </button>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setPinVisible(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={verificarPin}>🔓 Desbloquear</button>
+              <button className="btn btn-secondary" onClick={() => setOpenEdit(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarEdicion}><Save size={15} /> Guardar cambios</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL HISTORIAL */}
-      {historialCliente && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setHistorialCliente(null)}>
-          <div className="modal" style={{ maxWidth: 600 }}>
+      {/* ══ MODAL AÑADIR ══ */}
+      {openAdd && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenAdd(false)}>
+          <div className="modal" style={{ maxWidth: 660 }}>
             <div className="modal-header">
-              <h3 className="modal-title">📋 Historial — {historialCliente.nombre}</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setHistorialCliente(null)}><X size={16} /></button>
+              <h3 className="modal-title">➕ Añadir Pedidos Habituales</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenAdd(false)}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              {loadingHistorial ? (
-                <p style={{ textAlign: 'center', color: 'var(--gris)' }}>Cargando...</p>
-              ) : historialPedidos.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--gris)', padding: '20px 0' }}>Sin pedidos registrados</p>
-              ) : (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
-                    <div style={{ background: '#fff8f0', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Fredoka One', fontSize: '1.3rem', color: 'var(--naranja)' }}>{historialPedidos.length}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--gris)', fontWeight: 800 }}>PEDIDOS</div>
-                    </div>
-                    <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Fredoka One', fontSize: '1.3rem', color: '#16a34a' }}>
-                        {historialPedidos.reduce((s, p) => s + Number(p.cantidad), 0)}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--gris)', fontWeight: 800 }}>UNIDADES</div>
-                    </div>
-                    <div style={{ background: '#eff6ff', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Fredoka One', fontSize: '1.3rem', color: '#2563eb' }}>
-                        {historialPedidos.reduce((s, p) => s + Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100), 0).toFixed(2)}€
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--gris)', fontWeight: 800 }}>FACTURADO</div>
-                    </div>
-                  </div>
-                  <div className="table-wrap" style={{ maxHeight: 360, overflowY: 'auto' }}>
-                    <table>
-                      <thead><tr><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Total</th></tr></thead>
-                      <tbody>
-                        {historialPedidos.map((p, i) => (
-                          <tr key={i}>
-                            <td style={{ fontSize: '0.8rem' }}>{p.fecha}</td>
-                            <td><strong>{(p as any).productos?.nombre}</strong></td>
-                            <td style={{ textAlign: 'center' }}>{p.cantidad}</td>
-                            <td><strong style={{ color: 'var(--naranja)' }}>
-                              {(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)}€
-                            </strong></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+              <div className="input-group">
+                <label className="input-label">Cliente</label>
+                <select className="select" value={formCliente} onChange={e => setFormCliente(e.target.value)}>
+                  <option value="">Seleccionar cliente...</option>
+                  {clientes.map(c => {
+                    const tieneHabituales = modelos.some(m => m.cliente_id === c.id)
+                    return <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}{tieneHabituales ? ' ⚠️ ya tiene habituales' : ''}</option>
+                  })}
+                </select>
+              </div>
+              {formCliente && modelos.some(m => m.cliente_id === formCliente) && (
+                <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: '0.82rem', color: '#92400e', fontWeight: 700 }}>
+                  ⚠️ Este cliente ya tiene pedidos habituales. Al guardar los SUSTITUIRÁ.
+                </div>
               )}
+              <div style={{ borderTop: '1px solid #f5e8d8', paddingTop: 12, marginTop: 4 }}>
+                <label className="input-label" style={{ marginBottom: 10, display: 'block' }}>Productos y días</label>
+                {formLineas.map((linea, i) => renderLinea(
+                  linea, i,
+                  (idx, k, v) => setFormLineas(prev => prev.map((l, j) => j === idx ? { ...l, [k]: v } : l)),
+                  toggleDiaAdd, selectAllDiasAdd,
+                  (idx) => setFormLineas(prev => prev.filter((_, j) => j !== idx)),
+                  formLineas.length
+                ))}
+                <button className="btn btn-secondary btn-sm" onClick={() => setFormLineas(prev => [...prev, { producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])}>
+                  <Plus size={13} /> Añadir producto
+                </button>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenAdd(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleAdd}><Save size={15} /> Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL DUPLICAR ══ */}
+      {openDuplicar && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenDuplicar(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">📋 Duplicar Pedidos Habituales</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenDuplicar(false)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: '0.82rem', color: '#166534' }}>
+                💡 Copia los habituales de un cliente a otro. Los del destino serán reemplazados.
+              </div>
+              <div className="input-group">
+                <label className="input-label">Cliente ORIGEN (copiar desde)</label>
+                <select className="select" value={duplicarDesde} onChange={e => setDuplicarDesde(e.target.value)}>
+                  <option value="">Seleccionar...</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}</option>)}
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Cliente DESTINO (copiar hacia)</label>
+                <select className="select" value={duplicarHasta} onChange={e => setDuplicarHasta(e.target.value)}>
+                  <option value="">Seleccionar...</option>
+                  {clientes.filter(c => c.id !== duplicarDesde).map(c => <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenDuplicar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleDuplicar}>📋 Duplicar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL SUSPENSIÓN ══ */}
+      {openSusp && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenSusp(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">⏸ Suspensión Vacacional</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenSusp(false)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: '0.875rem', color: '#92400e' }}>
+                <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6 }} />
+                <strong>{suspCNombre}</strong> — Sin pedidos durante el periodo indicado.
+              </div>
+              <div className="input-group">
+                <label className="input-label">Motivo</label>
+                <select className="select" value={suspMotivo} onChange={e => setSuspMotivo(e.target.value)}>
+                  <option value="Vacaciones">🏖 Vacaciones</option>
+                  <option value="Enfermedad">🏥 Enfermedad</option>
+                  <option value="Viaje">✈️ Viaje</option>
+                  <option value="Cierre temporal">🔒 Cierre temporal</option>
+                  <option value="Otro">📝 Otro</option>
+                </select>
+              </div>
+              <div className="form-grid-2">
+                <div className="input-group">
+                  <label className="input-label">Fecha inicio</label>
+                  <input className="input" type="date" value={suspInicio} onChange={e => setSuspInicio(e.target.value)} min={today} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Fecha fin</label>
+                  <input className="input" type="date" value={suspFin} onChange={e => setSuspFin(e.target.value)} min={suspInicio || today} />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenSusp(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSusp}><Calendar size={15} /> Guardar suspensión</button>
             </div>
           </div>
         </div>
