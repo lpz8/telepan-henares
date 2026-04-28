@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, X, Save, ChevronDown, ChevronUp, Calendar, AlertTriangle, Edit2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
@@ -220,20 +221,23 @@ export default function PedidosModelo() {
 
   const guardarEdicion = async () => {
     if (!user || !editClienteId) return
-    try {
-      await supabase.from('pedidos_modelo').delete().eq('cliente_id', editClienteId).eq('user_id', user.id)
-      const validas = editLineas.filter(l => l.producto_id && l.dias.length > 0 && l.cantidad > 0)
-      if (validas.length > 0) {
-        const inserts: any[] = []
-        validas.forEach(l => l.dias.forEach(dia => inserts.push({
-          user_id: user.id, cliente_id: editClienteId, producto_id: l.producto_id,
-          dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0
-        })))
-        await supabase.from('pedidos_modelo').insert(inserts)
+    const { error: delErr } = await supabase.from('pedidos_modelo').delete().eq('cliente_id', editClienteId).eq('user_id', user.id)
+    if (delErr) return globalToast('Error al borrar: ' + delErr.message, 'error')
+    const validas = editLineas.filter(l => l.producto_id && l.dias.length > 0 && l.cantidad > 0)
+    if (validas.length > 0) {
+      const inserts: any[] = []
+      validas.forEach(l => l.dias.forEach(dia => inserts.push({
+        user_id: user.id, cliente_id: editClienteId, producto_id: l.producto_id,
+        dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0
+      })))
+      const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
+      if (insErr) {
+        console.error('Error inserting edited pedidos_modelo:', insErr)
+        return globalToast('Error al guardar: ' + insErr.message, 'error')
       }
-      globalToast(`✅ Habituales de ${editClienteNombre} actualizados`)
-      setOpenEdit(false); load()
-    } catch (err: any) { globalToast(err.message, 'error') }
+    }
+    globalToast(`✅ Habituales de ${editClienteNombre} actualizados`)
+    setOpenEdit(false); load()
   }
 
   const editLineaField = (i: number, campo: string, val: any) =>
@@ -270,20 +274,24 @@ export default function PedidosModelo() {
       const clienteNombre = clientes.find(c => c.id === formCliente)?.nombre || ''
       const resp = confirm(`⚠️ ${clienteNombre} ya tiene ${existentes.length} pedido(s) habitual(es).\n\n- Aceptar = SUSTITUIR los existentes\n- Cancelar = No hacer nada`)
       if (!resp) return
-      await supabase.from('pedidos_modelo').delete().eq('cliente_id', formCliente).eq('user_id', user.id)
+      const { error: delErr } = await supabase.from('pedidos_modelo').delete().eq('cliente_id', formCliente).eq('user_id', user.id)
+      if (delErr) return globalToast('Error al borrar habituales: ' + delErr.message, 'error')
     }
     const inserts: any[] = []
     validas.forEach(l => l.dias.forEach(dia => inserts.push({
       user_id: user.id, cliente_id: formCliente, producto_id: l.producto_id,
-      dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0
+      dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos',
+      descuento: l.descuento || 0
     })))
-    try {
-      await supabase.from('pedidos_modelo').insert(inserts)
-      globalToast(`✅ ${inserts.length} habituales guardados`)
-      setOpenAdd(false); setFormCliente('')
-      setFormLineas([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])
-      load()
-    } catch (err: any) { globalToast(err.message, 'error') }
+    const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
+    if (insErr) {
+      console.error('Error inserting pedidos_modelo:', insErr)
+      return globalToast('Error al guardar: ' + insErr.message, 'error')
+    }
+    globalToast(`✅ ${inserts.length} habituales guardados`)
+    setOpenAdd(false); setFormCliente('')
+    setFormLineas([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])
+    load()
   }
 
   const deleteAll = async (cId: string, nombre: string) => {
@@ -365,10 +373,16 @@ export default function PedidosModelo() {
       <div className="form-grid-2" style={{ marginBottom: 8 }}>
         <div className="input-group" style={{ marginBottom: 0 }}>
           <label className="input-label">Producto</label>
-          <select className="select" value={linea.producto_id} onChange={e => onChange(i, 'producto_id', e.target.value)}>
-            <option value="">Seleccionar...</option>
-            {productos.map(p => <option key={p.id} value={p.id}>{p.nombre} — {Number(p.precio_sin_iva).toFixed(2)}€</option>)}
-          </select>
+          <SearchableSelect
+            value={linea.producto_id}
+            onChange={v => onChange(i, 'producto_id', v)}
+            placeholder="🔍 Buscar producto..."
+            options={productos.map(p => ({
+              value: p.id,
+              label: p.nombre,
+              sublabel: `${Number(p.precio_sin_iva).toFixed(2)}€`
+            }))}
+          />
         </div>
         <div className="form-grid-2" style={{ marginBottom: 0 }}>
           <div className="input-group" style={{ marginBottom: 0 }}>
@@ -704,13 +718,19 @@ export default function PedidosModelo() {
             <div className="modal-body">
               <div className="input-group">
                 <label className="input-label">Cliente</label>
-                <select className="select" value={formCliente} onChange={e => setFormCliente(e.target.value)}>
-                  <option value="">Seleccionar cliente...</option>
-                  {clientes.map(c => {
+                <SearchableSelect
+                  value={formCliente}
+                  onChange={v => setFormCliente(v)}
+                  placeholder="🔍 Buscar cliente..."
+                  options={clientes.map(c => {
                     const tieneHabituales = modelos.some(m => m.cliente_id === c.id)
-                    return <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}{tieneHabituales ? ' ⚠️ ya tiene habituales' : ''}</option>
+                    return {
+                      value: c.id,
+                      label: `#${c.codigo} — ${c.nombre}${tieneHabituales ? ' ⚠️' : ''}`,
+                      sublabel: c.poblacion
+                    }
                   })}
-                </select>
+                />
               </div>
               {formCliente && modelos.some(m => m.cliente_id === formCliente) && (
                 <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: '0.82rem', color: '#92400e', fontWeight: 700 }}>

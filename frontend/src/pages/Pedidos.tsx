@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Zap, Plus, Trash2, X, ChevronDown, ChevronUp, AlertCircle, PauseCircle } from 'lucide-react'
+import SearchableSelect from '../components/SearchableSelect'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
@@ -535,20 +536,32 @@ export default function Pedidos() {
             <div className="modal-body">
               <div className="input-group">
                 <label className="input-label">Cliente</label>
-                <select className="select" value={formManual.cliente_id} onChange={e => setFormManual(f => ({ ...f, cliente_id: e.target.value }))}>
-                  <option value="">Seleccionar...</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.codigo} - {c.nombre}</option>)}
-                </select>
+                <SearchableSelect
+                  value={formManual.cliente_id}
+                  onChange={v => setFormManual(f => ({ ...f, cliente_id: v }))}
+                  placeholder="🔍 Buscar cliente..."
+                  options={clientes.map(c => ({
+                    value: c.id,
+                    label: `#${c.codigo} — ${c.nombre}`,
+                    sublabel: c.poblacion
+                  }))}
+                />
               </div>
               <div className="input-group">
                 <label className="input-label">Producto</label>
-                <select className="select" value={formManual.producto_id} onChange={e => {
-                  const prod = productos.find(p => p.id === e.target.value)
-                  setFormManual(f => ({ ...f, producto_id: e.target.value, precio: prod?.precio_sin_iva || 0, iva: prod?.iva || 4 }))
-                }}>
-                  <option value="">Seleccionar...</option>
-                  {productos.map(p => <option key={p.id} value={p.id}>{p.nombre} ({Number(p.precio_sin_iva).toFixed(2)}€)</option>)}
-                </select>
+                <SearchableSelect
+                  value={formManual.producto_id}
+                  onChange={v => {
+                    const prod = productos.find(p => p.id === v)
+                    setFormManual(f => ({ ...f, producto_id: v, precio: prod?.precio_sin_iva || 0, iva: prod?.iva || 4 }))
+                  }}
+                  placeholder="🔍 Buscar producto..."
+                  options={productos.map(p => ({
+                    value: p.id,
+                    label: p.nombre,
+                    sublabel: `${Number(p.precio_sin_iva).toFixed(2)}€ · IVA ${p.iva}%`
+                  }))}
+                />
               </div>
               <div className="input-group">
                 <label className="input-label">Cantidad</label>
