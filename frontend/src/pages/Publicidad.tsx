@@ -181,6 +181,7 @@ export default function Publicidad() {
     if (!catActual) return
     const w = window.open('', '_blank')
     if (!w) return
+    const imgs = getImagenes()
     const cols = Math.min(3, Math.ceil(catActual.productos.length / 4))
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>TelePan — ${catActual.titulo}</title>
@@ -193,8 +194,10 @@ export default function Publicidad() {
       .titulo{font-size:2rem;font-weight:900;color:${catActual.color};text-align:center}
       .subtitulo{font-size:0.8rem;color:#888;text-align:right;font-style:italic}
       .grid{display:grid;grid-template-columns:repeat(${cols},1fr);gap:10px;margin-bottom:16px}
-      .item{border:2px solid ${catActual.color};border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
-      .item-nombre{font-weight:800;font-size:0.82rem;text-transform:uppercase}
+      .item{border:2px solid ${catActual.color};border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+      .item-img{width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0}
+      .item-emoji{font-size:1.4rem;flex-shrink:0;width:36px;text-align:center}
+      .item-nombre{font-weight:800;font-size:0.82rem;text-transform:uppercase;flex:1}
       .item-precio{font-size:1.1rem;font-weight:900;color:${catActual.color};white-space:nowrap;margin-left:8px}
       .footer{text-align:center;font-size:0.75rem;color:#888;border-top:1px solid #eee;padding-top:10px;font-style:italic}
       @media print{body{padding:10px}}
@@ -207,7 +210,11 @@ export default function Publicidad() {
     <div class="grid">
       ${catActual.productos.map(p => `
         <div class="item">
-          <span class="item-nombre">${p.emoji} ${p.nombre}</span>
+          ${imgs[p.id]
+            ? `<img src="${imgs[p.id]}" class="item-img" alt="${p.nombre}"/>`
+            : `<span class="item-emoji">${p.emoji}</span>`
+          }
+          <span class="item-nombre">${p.nombre}</span>
           <span class="item-precio">${p.precio}</span>
         </div>
       `).join('')}

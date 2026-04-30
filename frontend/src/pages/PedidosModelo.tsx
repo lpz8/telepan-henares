@@ -773,17 +773,21 @@ export default function PedidosModelo() {
               </div>
               <div className="input-group">
                 <label className="input-label">Cliente ORIGEN (copiar desde)</label>
-                <select className="select" value={duplicarDesde} onChange={e => setDuplicarDesde(e.target.value)}>
-                  <option value="">Seleccionar...</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}</option>)}
-                </select>
+                <SearchableSelect
+                  value={duplicarDesde}
+                  onChange={setDuplicarDesde}
+                  placeholder="🔍 Buscar cliente origen..."
+                  options={clientes.map(c => ({ value: c.id, label: `#${c.codigo} — ${c.nombre}`, sublabel: c.poblacion }))}
+                />
               </div>
               <div className="input-group">
                 <label className="input-label">Cliente DESTINO (copiar hacia)</label>
-                <select className="select" value={duplicarHasta} onChange={e => setDuplicarHasta(e.target.value)}>
-                  <option value="">Seleccionar...</option>
-                  {clientes.filter(c => c.id !== duplicarDesde).map(c => <option key={c.id} value={c.id}>#{c.codigo} — {c.nombre}</option>)}
-                </select>
+                <SearchableSelect
+                  value={duplicarHasta}
+                  onChange={setDuplicarHasta}
+                  placeholder="🔍 Buscar cliente destino..."
+                  options={clientes.filter(c => c.id !== duplicarDesde).map(c => ({ value: c.id, label: `#${c.codigo} — ${c.nombre}`, sublabel: c.poblacion }))}
+                />
               </div>
             </div>
             <div className="modal-footer">
