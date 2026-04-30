@@ -623,6 +623,12 @@ export default function PedidosModelo() {
                         return <span key={i} style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 800, background: activo ? (susp ? '#f59e0b' : 'var(--naranja)') : '#f3f4f6', color: activo ? 'white' : '#ccc' }}>{d[0]}</span>
                       })}
                     </div>
+                    {/* Botón editar directo en cabecera */}
+                    <button
+                      onClick={e => { e.stopPropagation(); abrirEdicion(clienteId, cliente.nombre, items) }}
+                      style={{ background: 'var(--naranja)', color: 'white', border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <Edit2 size={12} /> Editar
+                    </button>
                     <span style={{ color: 'var(--gris)' }}>{isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
                   </div>
 
