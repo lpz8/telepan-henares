@@ -32,8 +32,7 @@ export default function Pedidos() {
   const [productos, setProductos] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [openManual, setOpenManual] = useState(false)
-  const [editPedido, setEditPedido] = useState<any>(null)
-  const [editCantidad, setEditCantidad] = useState(1)
+  const [editCliente, setEditCliente] = useState<{ id: string; nombre: string; lineas: any[]; _productoAdd?: string; _cantidadAdd?: number } | null>(null)
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<any[]>([])
@@ -398,14 +397,17 @@ export default function Pedidos() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontWeight: 800, color: '#16a34a' }}>{total.toFixed(2)} €</span>
-                  <button className="btn btn-primary btn-sm btn-icon"
+                  <button className="btn btn-primary btn-sm"
                     onClick={e => {
                       e.stopPropagation()
-                      // Abrir expandido y permitir editar cantidad de cada línea
-                      setExpandedClients(prev => { const n = new Set(prev); n.add(clienteId); return n })
+                      setEditCliente({
+                        id: clienteId,
+                        nombre: cliente?.nombre,
+                        lineas: items.map((p: any) => ({ ...p, _cantidad: p.cantidad }))
+                      })
                     }}
-                    title="Editar cantidades">
-                    <Edit2 size={13} />
+                    title="Editar pedido de este cliente">
+                    <Edit2 size={12} /> Editar
                   </button>
                   <button className="btn btn-danger btn-sm btn-icon"
                     onClick={e => {
@@ -428,28 +430,10 @@ export default function Pedidos() {
                       {items.map((p: any) => (
                         <tr key={p.id}>
                           <td style={{ fontWeight: 700 }}>{p.productos?.nombre}</td>
-                          <td style={{ textAlign: 'center', width: 80 }}>
-                            {/* Editar cantidad directamente inline */}
-                            <input
-                              type="number" min={1} step={1}
-                              defaultValue={p.cantidad}
-                              style={{ width: 60, textAlign: 'center', fontWeight: 800, fontSize: '1rem', border: '1.5px solid var(--naranja)', borderRadius: 6, padding: '2px 6px', fontFamily: 'Nunito' }}
-                              onBlur={async e => {
-                                const nueva = Math.max(1, parseInt(e.target.value) || 1)
-                                if (nueva !== p.cantidad) {
-                                  await supabase.from('pedidos').update({ cantidad: nueva }).eq('id', p.id)
-                                  globalToast('✅ Cantidad actualizada')
-                                  load()
-                                }
-                              }}
-                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                            />
-                          </td>
+                          <td style={{ textAlign: 'center' }}><strong style={{fontFamily:'Fredoka One',fontSize:'1.1rem',color:'var(--naranja)'}}>{p.cantidad}</strong></td>
                           <td>{Number(p.precio).toFixed(2)} €</td>
-                          <td><strong style={{color:'var(--naranja)'}}>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
-                          <td>
-                            <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button>
-                          </td>
+                          <td><strong style={{color:'var(--naranja)'}}>{(Number(p.cantidad)*Number(p.precio)*(1+Number(p.iva)/100)).toFixed(2)} €</strong></td>
+                          <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -472,41 +456,151 @@ export default function Pedidos() {
 
       </>}
 
-      {/* Modal editar línea de pedido */}
-      {editPedido && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditPedido(null)}>
-          <div className="modal" style={{ maxWidth: 400 }}>
+      {/* Modal editar pedido completo del cliente */}
+      {editCliente && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditCliente(null)}>
+          <div className="modal" style={{ maxWidth: 520 }}>
             <div className="modal-header">
-              <h3 className="modal-title">✏️ Editar pedido</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setEditPedido(null)}><X size={16} /></button>
+              <h3 className="modal-title">✏️ Editar pedido — {editCliente.nombre}</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setEditCliente(null)}><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <div style={{ background: 'var(--crema)', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
-                <div style={{ fontWeight: 800, color: 'var(--marron)', fontSize: '1rem' }}>{editPedido.productos?.nombre}</div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--gris)', marginTop: 2 }}>
-                  {Number(editPedido.precio).toFixed(2)} € · IVA {editPedido.iva}%
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
+                💡 Cambia las cantidades y pulsa <strong>Guardar todo</strong>. También puedes eliminar líneas con 🗑️.
+              </div>
+              {editCliente.lineas.map((l, i) => (
+                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: i % 2 === 0 ? 'var(--crema)' : 'white', borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, color: 'var(--marron)', fontSize: '0.9rem' }}>{l.productos?.nombre}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{Number(l.precio).toFixed(2)} € · IVA {l.iva}%</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button style={{ background: '#f3f4f6', border: 'none', borderRadius: 6, width: 32, height: 32, fontSize: '1.1rem', cursor: 'pointer', fontWeight: 800 }}
+                      onClick={() => setEditCliente(prev => prev ? { ...prev, lineas: prev.lineas.map((x, j) => j === i ? { ...x, _cantidad: Math.max(1, x._cantidad - 1) } : x) } : prev)}>−</button>
+                    <input type="number" min={1} step={1}
+                      value={l._cantidad}
+                      onChange={e => {
+                        const v = Math.max(1, parseInt(e.target.value) || 1)
+                        setEditCliente(prev => prev ? { ...prev, lineas: prev.lineas.map((x, j) => j === i ? { ...x, _cantidad: v } : x) } : prev)
+                      }}
+                      style={{ width: 56, textAlign: 'center', fontWeight: 800, fontSize: '1.1rem', border: '2px solid var(--naranja)', borderRadius: 8, padding: '4px', fontFamily: 'Nunito' }} />
+                    <button style={{ background: 'var(--naranja)', border: 'none', borderRadius: 6, width: 32, height: 32, fontSize: '1.1rem', cursor: 'pointer', fontWeight: 800, color: 'white' }}
+                      onClick={() => setEditCliente(prev => prev ? { ...prev, lineas: prev.lineas.map((x, j) => j === i ? { ...x, _cantidad: x._cantidad + 1 } : x) } : prev)}>+</button>
+                  </div>
+                  <div style={{ minWidth: 60, textAlign: 'right', fontWeight: 800, color: '#16a34a', fontSize: '0.9rem' }}>
+                    {(l._cantidad * Number(l.precio) * (1 + Number(l.iva) / 100)).toFixed(2)} €
+                  </div>
+                  <button className="btn btn-danger btn-sm btn-icon" onClick={() =>
+                    setEditCliente(prev => prev ? { ...prev, lineas: prev.lineas.filter((_, j) => j !== i) } : prev)
+                  }><Trash2 size={13} /></button>
+                </div>
+              ))}
+              {editCliente.lineas.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--gris)', padding: 20 }}>No quedan productos. Pulsa Guardar para borrar el pedido del cliente.</div>
+              )}
+
+              {/* AÑADIR PRODUCTO NUEVO */}
+              <div style={{ marginTop: 14, borderTop: '2px solid #f5e8d8', paddingTop: 14, background: '#fff8f0', borderRadius: 10, padding: '12px' }}>
+                <div style={{ fontWeight: 800, color: 'var(--naranja)', fontSize: '0.9rem', marginBottom: 10 }}>➕ Añadir producto al pedido</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="input-label">Producto</label>
+                    <select className="select"
+                      value={editCliente._productoAdd || ''}
+                      onChange={e => setEditCliente(prev => prev ? { ...prev, _productoAdd: e.target.value } : prev)}>
+                      <option value="">Seleccionar producto...</option>
+                      {productos.map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre} — {Number(p.precio_sin_iva).toFixed(2)}€</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ width: 80 }}>
+                    <label className="input-label">Cant.</label>
+                    <input className="input" type="number" min={1} step={1}
+                      value={editCliente._cantidadAdd || 1}
+                      onChange={e => setEditCliente(prev => prev ? { ...prev, _cantidadAdd: Math.max(1, parseInt(e.target.value) || 1) } : prev)}
+                      style={{ textAlign: 'center', fontWeight: 800 }} />
+                  </div>
+                  <button className="btn btn-primary" style={{ minWidth: 80 }}
+                    onClick={() => {
+                      const prodId = editCliente._productoAdd
+                      if (!prodId) { globalToast('Selecciona un producto', 'error'); return }
+                      const cant = editCliente._cantidadAdd || 1
+                      // Si ya existe, sumar cantidad
+                      const existe = editCliente.lineas.findIndex(l => l.producto_id === prodId)
+                      if (existe >= 0) {
+                        setEditCliente(prev => prev ? {
+                          ...prev,
+                          lineas: prev.lineas.map((x, j) => j === existe ? { ...x, _cantidad: x._cantidad + cant } : x),
+                          _productoAdd: '', _cantidadAdd: 1
+                        } : prev)
+                        globalToast('✅ Cantidad aumentada')
+                        return
+                      }
+                      const prod = productos.find(p => p.id === prodId)
+                      if (!prod) return
+                      setEditCliente(prev => prev ? {
+                        ...prev,
+                        lineas: [...prev.lineas, {
+                          id: 'new_' + Date.now(),
+                          producto_id: prod.id,
+                          productos: { nombre: prod.nombre },
+                          precio: prod.precio_sin_iva,
+                          iva: prod.iva,
+                          cantidad: cant,
+                          _cantidad: cant,
+                          _nuevo: true
+                        }],
+                        _productoAdd: '', _cantidadAdd: 1
+                      } : prev)
+                    }}>
+                    ➕ Añadir
+                  </button>
                 </div>
               </div>
-              <div className="input-group">
-                <label className="input-label">Cantidad</label>
-                <input className="input" type="number" min={1} step={1}
-                  value={editCantidad}
-                  onChange={e => setEditCantidad(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={{ fontSize: '1.3rem', textAlign: 'center', fontWeight: 800 }}
-                  autoFocus />
-              </div>
-              <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px', fontSize: '0.9rem', color: '#166534', fontWeight: 700 }}>
-                💰 Total: {(editCantidad * Number(editPedido.precio) * (1 + Number(editPedido.iva) / 100)).toFixed(2)} €
+              <div style={{ background: '#fff8f0', borderRadius: 8, padding: '10px 14px', marginTop: 12, display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
+                <span>Total del pedido:</span>
+                <span style={{ color: 'var(--naranja)', fontFamily: 'Fredoka One', fontSize: '1.2rem' }}>
+                  {editCliente.lineas.reduce((s, l) => s + l._cantidad * Number(l.precio) * (1 + Number(l.iva) / 100), 0).toFixed(2)} €
+                </span>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setEditPedido(null)}>Cancelar</button>
+              <button className="btn btn-secondary" onClick={() => setEditCliente(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={async () => {
-                await supabase.from('pedidos').update({ cantidad: editCantidad }).eq('id', editPedido.id)
-                globalToast('✅ Cantidad actualizada')
-                setEditPedido(null)
+                if (!user) return
+                // Líneas existentes (actualizar cantidad)
+                const existentes = editCliente.lineas.filter(l => !l._nuevo)
+                const nuevas = editCliente.lineas.filter(l => l._nuevo)
+
+                // Updates de existentes
+                const updates = existentes.map(l =>
+                  supabase.from('pedidos').update({ cantidad: l._cantidad }).eq('id', l.id)
+                )
+                // Eliminar las que se borraron
+                const idsRestantes = new Set(existentes.map(l => l.id))
+                const { data: originales } = await supabase.from('pedidos')
+                  .select('id').eq('cliente_id', editCliente.id).eq('fecha', fecha)
+                const eliminados = (originales || []).filter(o => !idsRestantes.has(o.id))
+                const deletes = eliminados.map(o => supabase.from('pedidos').delete().eq('id', o.id))
+                // Insertar nuevos productos
+                const inserts = nuevas.length > 0
+                  ? supabase.from('pedidos').insert(nuevas.map(l => ({
+                      user_id: user.id,
+                      cliente_id: editCliente.id,
+                      producto_id: l.producto_id,
+                      fecha,
+                      cantidad: l._cantidad,
+                      precio: l.precio,
+                      iva: l.iva
+                    })))
+                  : Promise.resolve()
+
+                await Promise.all([...updates, ...deletes, inserts])
+                globalToast('✅ Pedido de ' + editCliente.nombre + ' actualizado')
+                setEditCliente(null)
                 load()
-              }}>💾 Guardar</button>
+              }}>💾 Guardar todo</button>
             </div>
           </div>
         </div>
