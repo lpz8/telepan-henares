@@ -396,8 +396,17 @@ export default function Pedidos() {
                   <strong>{cliente?.nombre}</strong>
                   <span className="badge badge-gray">{cliente?.poblacion}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontWeight: 800, color: '#16a34a' }}>{total.toFixed(2)} €</span>
+                  <button className="btn btn-primary btn-sm btn-icon"
+                    onClick={e => {
+                      e.stopPropagation()
+                      // Abrir expandido y permitir editar cantidad de cada línea
+                      setExpandedClients(prev => { const n = new Set(prev); n.add(clienteId); return n })
+                    }}
+                    title="Editar cantidades">
+                    <Edit2 size={13} />
+                  </button>
                   <button className="btn btn-danger btn-sm btn-icon"
                     onClick={e => {
                       e.stopPropagation()
@@ -414,22 +423,32 @@ export default function Pedidos() {
               {isExpanded && (
                 <div style={{ padding: '0 0 8px' }}>
                   <table style={{ width: '100%' }}>
-                    <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
+                    <thead><tr><th>Producto</th><th style={{textAlign:'center'}}>Cant.</th><th>Precio</th><th>Total</th><th></th></tr></thead>
                     <tbody>
                       {items.map((p: any) => (
                         <tr key={p.id}>
-                          <td>{p.productos?.nombre}</td>
-                          <td>{p.cantidad}</td>
+                          <td style={{ fontWeight: 700 }}>{p.productos?.nombre}</td>
+                          <td style={{ textAlign: 'center', width: 80 }}>
+                            {/* Editar cantidad directamente inline */}
+                            <input
+                              type="number" min={1} step={1}
+                              defaultValue={p.cantidad}
+                              style={{ width: 60, textAlign: 'center', fontWeight: 800, fontSize: '1rem', border: '1.5px solid var(--naranja)', borderRadius: 6, padding: '2px 6px', fontFamily: 'Nunito' }}
+                              onBlur={async e => {
+                                const nueva = Math.max(1, parseInt(e.target.value) || 1)
+                                if (nueva !== p.cantidad) {
+                                  await supabase.from('pedidos').update({ cantidad: nueva }).eq('id', p.id)
+                                  globalToast('✅ Cantidad actualizada')
+                                  load()
+                                }
+                              }}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                            />
+                          </td>
                           <td>{Number(p.precio).toFixed(2)} €</td>
-                          <td><strong>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
+                          <td><strong style={{color:'var(--naranja)'}}>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
                           <td>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button className="btn btn-secondary btn-sm btn-icon" title="Editar cantidad"
-                                onClick={() => { setEditPedido(p); setEditCantidad(p.cantidad) }}>
-                                <Edit2 size={12} />
-                              </button>
-                              <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button>
-                            </div>
+                            <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button>
                           </td>
                         </tr>
                       ))}
