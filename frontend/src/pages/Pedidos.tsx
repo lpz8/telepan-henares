@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Zap, Plus, Trash2, X, ChevronDown, ChevronUp, AlertCircle, PauseCircle } from 'lucide-react'
+import { Zap, Plus, Trash2, X, ChevronDown, ChevronUp, AlertCircle, PauseCircle, Edit2 } from 'lucide-react'
 import SearchableSelect from '../components/SearchableSelect'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -32,6 +32,8 @@ export default function Pedidos() {
   const [productos, setProductos] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [openManual, setOpenManual] = useState(false)
+  const [editPedido, setEditPedido] = useState<any>(null)
+  const [editCantidad, setEditCantidad] = useState(1)
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<any[]>([])
@@ -420,7 +422,15 @@ export default function Pedidos() {
                           <td>{p.cantidad}</td>
                           <td>{Number(p.precio).toFixed(2)} €</td>
                           <td><strong>{(Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)).toFixed(2)} €</strong></td>
-                          <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button></td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-secondary btn-sm btn-icon" title="Editar cantidad"
+                                onClick={() => { setEditPedido(p); setEditCantidad(p.cantidad) }}>
+                                <Edit2 size={12} />
+                              </button>
+                              <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(p.id)}><Trash2 size={12} /></button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -442,6 +452,46 @@ export default function Pedidos() {
       </div>
 
       </>}
+
+      {/* Modal editar línea de pedido */}
+      {editPedido && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditPedido(null)}>
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">✏️ Editar pedido</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setEditPedido(null)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'var(--crema)', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, color: 'var(--marron)', fontSize: '1rem' }}>{editPedido.productos?.nombre}</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--gris)', marginTop: 2 }}>
+                  {Number(editPedido.precio).toFixed(2)} € · IVA {editPedido.iva}%
+                </div>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Cantidad</label>
+                <input className="input" type="number" min={1} step={1}
+                  value={editCantidad}
+                  onChange={e => setEditCantidad(Math.max(1, parseInt(e.target.value) || 1))}
+                  style={{ fontSize: '1.3rem', textAlign: 'center', fontWeight: 800 }}
+                  autoFocus />
+              </div>
+              <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px', fontSize: '0.9rem', color: '#166534', fontWeight: 700 }}>
+                💰 Total: {(editCantidad * Number(editPedido.precio) * (1 + Number(editPedido.iva) / 100)).toFixed(2)} €
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setEditPedido(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={async () => {
+                await supabase.from('pedidos').update({ cantidad: editCantidad }).eq('id', editPedido.id)
+                globalToast('✅ Cantidad actualizada')
+                setEditPedido(null)
+                load()
+              }}>💾 Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal suspensiones */}
       {openSuspModal && (
