@@ -81,23 +81,37 @@ export default function PedidosModelo() {
   const [duplicarDesde, setDuplicarDesde] = useState('')
   const [duplicarHasta, setDuplicarHasta] = useState('')
 
+  // Contador de refresco de suspensiones — incrementar fuerza re-fetch
+  const [suspRefresh, setSuspRefresh] = useState(0)
+
   const today = new Date().toISOString().split('T')[0]
 
+  // Cargar suspensiones activas HOY — useEffect dedicado que se re-ejecuta al cambiar suspRefresh
+  useEffect(() => {
+    const t = new Date().toISOString().split('T')[0]
+    supabase.from('suspensiones_pedido').select('*').gte('fecha_fin', t)
+      .then(({ data }) => {
+        if (data) setSuspensiones(
+          data.filter(x => (x.fecha_inicio || '').substring(0, 10) <= t && (x.fecha_fin || '').substring(0, 10) >= t)
+        )
+      })
+  }, [suspRefresh])
+
   const load = async () => {
-    const [c, p, m, s] = await Promise.all([
+    const [c, p, m] = await Promise.all([
       supabase.from('clientes').select('*').order('orden_ruta').order('codigo'),
       supabase.from('productos').select('*').order('nombre'),
       supabase.from('pedidos_modelo').select('*, clientes(nombre,codigo,poblacion,orden_ruta), productos(nombre,precio_sin_iva)'),
-      supabase.from('suspensiones_pedido').select('*').gte('fecha_fin', today),
     ])
     if (c.data) setClientes(c.data)
     if (p.data) setProductos(p.data)
     if (m.data) setModelos(m.data)
-    if (s.data) setSuspensiones(s.data)
+    // Refrescar suspensiones también
+    setSuspRefresh(n => n + 1)
   }
   useEffect(() => { load() }, [])
 
-  const getSusp = (cId: string) => suspensiones.find(s => s.cliente_id === cId && s.fecha_inicio <= today && s.fecha_fin >= today)
+  const getSusp = (cId: string) => suspensiones.find(s => s.cliente_id === cId)
 
   const byCliente = clientes.reduce((acc: Record<string, any>, c) => {
     const cms = modelos.filter(m => m.cliente_id === c.id)
@@ -181,18 +195,18 @@ export default function PedidosModelo() {
 
   // Resumen artículos — CASA* y PISTOLA* agrupados
   const resumenArticulos = (() => {
-    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean }> = {}
+    const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean; grupo?: string }> = {}
     modelos.forEach(m => {
       const prod = productos.find(p => p.id === m.producto_id)
       const nombre: string = prod?.nombre || 'Desconocido'
       const cantidad = Number(m.cantidad)
       const up = nombre.toUpperCase().trim()
-      if (up.startsWith('CASA')) {
-        if (!totales['__CASA__']) totales['__CASA__'] = { nombre: 'BARRA CASA (todas)', cantidad: 0, esAgrupado: true }
-        totales['__CASA__'].cantidad += cantidad
-      } else if (up.startsWith('PISTOLA')) {
-        if (!totales['__PISTOLA__']) totales['__PISTOLA__'] = { nombre: 'BARRA PISTOLA (todas)', cantidad: 0, esAgrupado: true }
-        totales['__PISTOLA__'].cantidad += cantidad
+      if (up.startsWith('CASA') || up.startsWith('PISTOLA')) {
+        if (!totales['__BARRA__']) totales['__BARRA__'] = { nombre: 'BARRAS — CASA + PISTOLA', cantidad: 0, esAgrupado: true, grupo: 'barra' }
+        totales['__BARRA__'].cantidad += cantidad
+      } else if (up.startsWith('ARTESANA')) {
+        if (!totales['__ARTESANA__']) totales['__ARTESANA__'] = { nombre: 'ARTESANA (todas)', cantidad: 0, esAgrupado: true, grupo: 'artesana' }
+        totales['__ARTESANA__'].cantidad += cantidad
       } else {
         const key = up
         if (!totales[key]) totales[key] = { nombre, cantidad: 0 }
@@ -303,13 +317,43 @@ export default function PedidosModelo() {
   const handleSusp = async () => {
     if (!user || !suspCId || !suspInicio || !suspFin) return globalToast('Rellena todos los campos', 'error')
     if (suspFin < suspInicio) return globalToast('La fecha fin debe ser posterior', 'error')
-    await supabase.from('suspensiones_pedido').insert({ user_id: user.id, cliente_id: suspCId, fecha_inicio: suspInicio, fecha_fin: suspFin, motivo: suspMotivo })
-    globalToast('✅ Suspensión guardada'); setOpenSusp(false); setSuspCId(''); setSuspInicio(''); setSuspFin(''); load()
+
+    // Comprobar si ya existe suspensión activa para este cliente
+    const { data: existing } = await supabase.from('suspensiones_pedido')
+      .select('id').eq('cliente_id', suspCId).gte('fecha_fin', today)
+    if (existing && existing.length > 0) {
+      if (!confirm('Este cliente ya tiene una suspensión activa.\n¿Quieres SUSTITUIRLA por la nueva?')) return
+      await supabase.from('suspensiones_pedido').delete().eq('cliente_id', suspCId).gte('fecha_fin', today)
+    }
+
+    // Guardar nueva suspensión
+    const { error } = await supabase.from('suspensiones_pedido')
+      .insert({ user_id: user.id, cliente_id: suspCId, fecha_inicio: suspInicio, fecha_fin: suspFin, motivo: suspMotivo })
+    if (error) return globalToast('Error: ' + error.message, 'error')
+
+    // Si la suspensión empieza hoy o antes, eliminar el pedido de hoy
+    if (suspInicio <= today) {
+      const { data: pedidosHoy } = await supabase.from('pedidos')
+        .select('id').eq('cliente_id', suspCId).eq('fecha', today)
+      if (pedidosHoy && pedidosHoy.length > 0) {
+        await supabase.from('pedidos').delete().eq('cliente_id', suspCId).eq('fecha', today)
+        const clienteNombre = clientes.find(c => c.id === suspCId)?.nombre || 'El cliente'
+        globalToast(`✅ Suspensión guardada — pedido de hoy de ${clienteNombre} eliminado`)
+      } else {
+        globalToast('✅ Suspensión guardada')
+      }
+    } else {
+      globalToast('✅ Suspensión guardada')
+    }
+
+    setOpenSusp(false); setSuspCId(''); setSuspInicio(''); setSuspFin('')
+    setSuspRefresh(n => n + 1)  // Fuerza re-fetch inmediato de suspensiones
   }
 
   const deleteSusp = async (cId: string) => {
     await supabase.from('suspensiones_pedido').delete().eq('cliente_id', cId).gte('fecha_fin', today)
-    globalToast('✅ Pedidos reanudados'); load()
+    globalToast('✅ Pedidos reanudados')
+    setSuspRefresh(n => n + 1)
   }
 
   const handleDuplicar = async () => {
@@ -485,14 +529,7 @@ export default function PedidosModelo() {
       </div>
 
       {/* ══ TABS ══ */}
-      <div className="tabs-mobile-select">
-        <select value={tabActiva} onChange={e => setTabActiva(e.target.value as any)}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '2px solid var(--naranja)', fontFamily: 'Nunito', fontWeight: 800, fontSize: '0.95rem', color: 'var(--marron)', background: '#fff8f0', marginBottom: 12 }}>
-          <option value="habituales">📋 Habituales ({sorted.length} clientes)</option>
-          <option value="resumen">📦 Resumen artículos ({totalResumen} ud)</option>
-        </select>
-      </div>
-      <div className="tabs-desktop">
+<div className="tabs">
         <div className={`tab ${tabActiva === 'habituales' ? 'active' : ''}`} onClick={() => setTabActiva('habituales')}>
           📋 Habituales ({sorted.length} clientes)
         </div>
@@ -526,22 +563,22 @@ export default function PedidosModelo() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           {a.esAgrupado && (
-                            <span style={{ background: 'var(--naranja)', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>
+                            <span style={{ background: a.grupo === 'casa' ? '#16a34a' : a.grupo === 'pistola' ? 'var(--naranja)' : '#7c3aed', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>
                               AGRUPADO
                             </span>
                           )}
-                          <strong style={{ color: a.esAgrupado ? 'var(--naranja)' : 'var(--marron)' }}>{a.nombre}</strong>
+                          <strong style={{ color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : 'var(--marron)' }}>{a.nombre}</strong>
                         </div>
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.4rem', color: a.esAgrupado ? 'var(--naranja)' : '#2563eb' }}>
+                        <span style={{ fontFamily: 'Fredoka One', fontSize: '1.4rem', color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : '#2563eb' }}>
                           {a.cantidad}
                         </span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                           <div style={{ width: 80, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.esAgrupado ? '#E8670A' : '#2563eb', borderRadius: 4 }} />
+                            <div style={{ width: `${totalResumen > 0 ? (a.cantidad / totalResumen * 100) : 0}%`, height: '100%', background: a.grupo === 'barra' ? '#E8670A' : a.grupo === 'artesana' ? '#7c3aed' : '#2563eb', borderRadius: 4 }} />
                           </div>
                           <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--gris)' }}>
                             {totalResumen > 0 ? (a.cantidad / totalResumen * 100).toFixed(1) : 0}%
@@ -635,8 +672,10 @@ export default function PedidosModelo() {
                         {susp ? (
                           <button className="btn btn-success btn-sm" onClick={() => deleteSusp(clienteId)}>✅ Reanudar</button>
                         ) : (
-                          <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setSuspCId(clienteId); setSuspCNombre(cliente.nombre); setOpenSusp(true) }}>
-                            <Calendar size={12} /> Suspender
+                          <button className="btn btn-secondary btn-sm"
+                            style={{ background: suspensiones.some(s => s.cliente_id === clienteId) ? '#fef3c7' : '', color: suspensiones.some(s => s.cliente_id === clienteId) ? '#92400e' : '' }}
+                            onClick={e => { e.stopPropagation(); setSuspCId(clienteId); setSuspCNombre(cliente.nombre); setOpenSusp(true) }}>
+                            <Calendar size={12} /> {suspensiones.some(s => s.cliente_id === clienteId) ? '⚠️ Modificar susp.' : 'Suspender'}
                           </button>
                         )}
                         <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); deleteAll(clienteId, cliente.nombre) }}>

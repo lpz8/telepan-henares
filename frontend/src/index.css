@@ -419,244 +419,15 @@ tbody tr:last-child { border-bottom: none; }
 }
 
 
-/* TABS RESPONSIVOS — select en móvil, tabs en escritorio */
-.tabs-mobile-select { display: none; }
-.tabs-desktop { display: flex; gap: 4px; border-bottom: 2px solid #f5e8d8; margin-bottom: 16px; flex-wrap: wrap; }
-
-@media (max-width: 768px) {
-  .tabs-mobile-select { display: block; }
-  .tabs-desktop { display: none; }
-}
-
-/* PRINT STYLES */
-@media print {
-  .sidebar, .topbar, .no-print { display: none !important; }
-  .page-content { padding: 0; overflow: visible; }
-  .card { box-shadow: none; border: 1px solid #ddd; }
-}
+/*
 
 
+/* ═══════════════════════════════════════════════════════════
+   MOBILE — Idéntico al PC en iOS y Android
+   Solo ajustes de tamaño y scroll — mismas funciones y vistas
+═══════════════════════════════════════════════════════════ */
 
-/* ═══════════════════════════════════════════════
-   MOBILE RESPONSIVE — iPhone & Android
-   ═══════════════════════════════════════════════ */
-
-/* Tablet y móvil */
-@media (max-width: 768px) {
-
-  /* Layout base */
-  .app-layout { flex-direction: column; height: auto; min-height: 100dvh; }
-
-  /* Sidebar horizontal scrollable en móvil */
-  .sidebar {
-    width: 100% !important;
-    min-width: unset;
-    height: auto;
-    flex-direction: column;
-    padding: 0;
-    position: sticky;
-    top: 0;
-    z-index: 200;
-  }
-  .sidebar-logo { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); min-height: unset; }
-  .sidebar-logo img { width: 32px; height: 22px; }
-  .sidebar-logo .brand-name { font-size: 0.9rem; }
-  .sidebar-logo .brand-sub { display: none; }
-  .sidebar-nav {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    padding: 4px 6px;
-    scrollbar-width: none;
-    gap: 2px;
-  }
-  .sidebar-nav::-webkit-scrollbar { display: none; }
-  .nav-section { display: flex; flex-direction: row; padding: 0; gap: 0; }
-  .nav-section-title { display: none; }
-  .nav-item {
-    padding: 6px 10px;
-    margin: 2px 1px;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 0.6rem;
-    border-radius: 8px;
-    white-space: nowrap;
-    min-width: 52px;
-    min-height: 44px;
-    text-align: center;
-    justify-content: center;
-    align-items: center;
-  }
-  .nav-item svg { width: 18px; height: 18px; }
-  .nav-item span { font-size: 0.58rem; line-height: 1.2; }
-  .sidebar-footer { display: none; }
-
-  /* Contenido principal */
-  .main-content { flex: 1; min-width: 0; overflow-x: hidden; }
-  .page-content { padding: 10px 8px; overflow-x: hidden; }
-
-  /* Topbar */
-  .topbar { padding: 8px 12px; }
-  .topbar-title { font-size: 1rem; }
-  .topbar-date { display: none; }
-
-  /* Stats */
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
-  .stat-card { padding: 10px 12px; gap: 8px; }
-  .stat-icon { width: 36px; height: 36px; border-radius: 10px; }
-  .stat-value { font-size: 1.2rem; }
-  .stat-label { font-size: 0.68rem; }
-
-  /* Page header */
-  .page-header { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-  .page-title { font-size: 1.3rem; }
-  .page-actions {
-    display: flex;
-    flex-wrap: wrap;
-    width: 100%;
-    gap: 6px;
-    align-items: center;
-  }
-  .page-actions .input,
-  .page-actions .select,
-  .page-actions input[type="date"] {
-    width: 100%;
-    min-height: 40px;
-    font-size: 0.9rem;
-  }
-  .page-actions .btn { min-height: 40px; font-size: 0.82rem; padding: 6px 12px; }
-  .page-actions > div { width: 100%; }
-
-  /* Search boxes — ancho completo en móvil */
-  .search-box { width: 100%; }
-  .search-box input { width: 100% !important; }
-  input[placeholder*="Buscar"],
-  input[placeholder*="buscar"] { width: 100% !important; }
-
-  /* Tabs scrollable */
-  .tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    flex-wrap: nowrap;
-    scrollbar-width: none;
-    margin-bottom: 12px;
-    gap: 2px;
-  }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab { white-space: nowrap; flex-shrink: 0; padding: 6px 10px; font-size: 0.8rem; }
-
-  /* Cards */
-  .card { padding: 12px; border-radius: 12px; }
-
-  /* Tables */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
-  table { font-size: 0.8rem; min-width: 480px; }
-  thead th { padding: 8px; font-size: 0.68rem; }
-  tbody td { padding: 7px 8px; }
-
-  /* Buttons — touch targets mínimos 44px */
-  .btn { min-height: 40px; }
-  .btn-sm { min-height: 34px; padding: 5px 10px; font-size: 0.78rem; }
-  .btn-icon { min-height: 36px; min-width: 36px; padding: 6px; }
-
-  /* Forms */
-  .form-grid-2 { grid-template-columns: 1fr; gap: 8px; }
-  .input, .select, .textarea { font-size: 16px !important; } /* Evita zoom en iOS */
-  .input-group { margin-bottom: 10px; }
-
-  /* Modal — sube desde abajo en móvil */
-  .modal-overlay { align-items: flex-end; padding: 0; }
-  .modal {
-    max-width: 100% !important;
-    width: 100%;
-    border-radius: 20px 20px 0 0;
-    max-height: 92dvh;
-    overflow-y: auto;
-  }
-  .modal-header { padding: 16px 16px 12px; }
-  .modal-body { padding: 14px 16px; }
-  .modal-footer { padding: 12px 16px; }
-  .modal-title { font-size: 1.1rem; }
-
-  /* Badges */
-  .badge { font-size: 0.65rem; padding: 2px 6px; }
-
-  /* Empty state */
-  .empty-state { padding: 32px 16px; }
-
-  /* Toast — arriba izquierda en móvil */
-  .toast-container { top: 8px; right: 8px; left: 8px; align-items: stretch; }
-  .toast { min-width: unset; font-size: 0.82rem; padding: 10px 12px; }
-}
-
-/* Móvil pequeño */
-@media (max-width: 400px) {
-  .nav-item { min-width: 46px; padding: 5px 6px; }
-  .nav-item svg { width: 16px; height: 16px; }
-  .nav-item span { font-size: 0.55rem; }
-  .page-content { padding: 8px 6px; }
-  .card { padding: 10px; }
-  .page-title { font-size: 1.15rem; }
-  table { min-width: 400px; }
-}
-
-/* NOTIFICATION */
-.toast-container {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.toast {
-  background: white;
-  border-radius: 12px;
-  padding: 12px 16px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 260px;
-  border-left: 4px solid var(--naranja);
-  animation: slideIn 0.3s ease;
-  font-weight: 600;
-  font-size: 0.875rem;
-}
-.toast.error { border-left-color: #dc2626; }
-.toast.success { border-left-color: #16a34a; }
-@keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
-
-/* FACTURA PRINT */
-.factura-print {
-  font-family: 'Nunito', sans-serif;
-  max-width: 800px;
-  margin: 0 auto;
-  background: white;
-}
-.factura-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 3px solid var(--naranja);
-}
-.factura-logo { width: 120px; object-fit: contain; }
-.factura-empresa { text-align: right; font-size: 0.85rem; }
-.factura-empresa strong { font-size: 1rem; color: var(--marron); }
-.factura-table th { background: var(--naranja); color: white; }
-.iva-resumen { margin-top: 16px; }
-
-/* ═══════════════════════════════════════════════════════
-   MOBILE — iOS & Android
-   Regla principal: todo lo que se ve en PC debe verse en móvil
-   ═══════════════════════════════════════════════════════ */
-
-/* Evitar zoom en iOS al tocar inputs */
+/* Evitar zoom en iOS al tocar inputs (CRÍTICO para iPhone) */
 input, select, textarea, button { touch-action: manipulation; }
 @media (max-width: 768px) {
   input, select, textarea { font-size: 16px !important; }
@@ -665,136 +436,231 @@ input, select, textarea, button { touch-action: manipulation; }
   input, select, textarea { font-size: 14px !important; }
 }
 
+/* Tabs — siempre visibles con scroll horizontal (igual que PC) */
+.tabs {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  gap: 4px;
+  border-bottom: 2px solid #f5e8d8;
+  margin-bottom: 16px;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex-shrink: 0; white-space: nowrap; }
+
+/* Layout principal en móvil */
 @media (max-width: 768px) {
 
-  /* ── LAYOUT ── */
-  .app-layout { flex-direction: column; height: auto; min-height: 100dvh; }
+  /* Layout vertical */
+  .app-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
 
-  /* ── SIDEBAR horizontal en móvil ── */
-  .sidebar {
-    width: 100% !important; min-width: unset; height: auto;
-    flex-direction: column; padding: 0;
-    position: sticky; top: 0; z-index: 300;
-  }
-  .sidebar-logo { padding: 6px 12px; }
-  .sidebar-logo img { width: 30px; height: 22px; }
-  .sidebar-logo .brand-name { font-size: 0.85rem; }
-  .sidebar-logo .brand-sub { display: none; }
-  .sidebar-nav {
-    display: flex; flex-direction: row;
-    overflow-x: auto; overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    padding: 4px 6px; scrollbar-width: none; gap: 2px;
-  }
-  .sidebar-nav::-webkit-scrollbar { display: none; }
-  .nav-section { display: flex; flex-direction: row; padding: 0; }
-  .nav-section-title { display: none; }
-  .nav-item {
-    flex-direction: column; gap: 2px; padding: 6px 8px;
-    min-width: 52px; min-height: 52px; font-size: 0.58rem;
-    border-radius: 8px; white-space: nowrap;
-    text-align: center; justify-content: center; align-items: center;
-  }
-  .nav-item svg { width: 18px; height: 18px; }
-  .sidebar-footer { display: none; }
-
-  /* ── CONTENIDO ── */
+  /* Contenido */
   .main-content { flex: 1; min-width: 0; overflow-x: hidden; }
-  .page-content { padding: 10px 8px; overflow-x: hidden; }
+  .page-content { padding: 10px 10px 90px 10px; overflow-x: hidden; }
   .topbar { padding: 8px 12px; }
-  .topbar-title { font-size: 1rem; }
+  .topbar-title { font-size: 0.95rem; }
   .topbar-date { display: none; }
 
-  /* ── CABECERA PÁGINA ── */
+  /* ── SIDEBAR horizontal sticky arriba ── */
+  .sidebar {
+    width: 100% !important;
+    min-width: unset !important;
+    height: auto !important;
+    flex-direction: column;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 500;
+    box-shadow: 0 3px 20px rgba(0,0,0,0.35);
+  }
+
+  .sidebar-logo {
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 46px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  .sidebar-logo img { width: 34px; height: 25px; object-fit: contain; }
+  .sidebar-logo .brand-name { font-size: 0.9rem; }
+  .sidebar-logo .brand-sub { display: none; }
+  .sidebar-footer { display: none; }
+
+  /* Nav horizontal con scroll */
+  .sidebar-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 5px 8px;
+    gap: 3px;
+    scrollbar-width: none;
+    flex: unset;
+  }
+  .sidebar-nav::-webkit-scrollbar { display: none; }
+  .nav-section { display: flex !important; flex-direction: row !important; padding: 0; }
+  .nav-section-title { display: none !important; }
+
+  .nav-item {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 7px 10px;
+    min-width: 56px;
+    min-height: 52px;
+    border-radius: 10px;
+    white-space: nowrap;
+    font-size: 0.6rem;
+    flex-shrink: 0;
+    gap: 3px;
+  }
+  .nav-item svg { width: 20px !important; height: 20px !important; }
+  .nav-item span { font-size: 0.58rem !important; display: block !important; line-height: 1.2; }
+  .sidebar.collapsed .nav-item span { display: block !important; }
+
+  /* Page header */
   .page-header {
-    flex-direction: column; align-items: flex-start;
-    gap: 10px; margin-bottom: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
   }
-  .page-title { font-size: 1.2rem; }
+  .page-title { font-size: 1.2rem !important; }
+
+  /* Botones en cabecera — flexbox wrap */
   .page-actions {
-    display: flex; flex-wrap: wrap;
-    width: 100%; gap: 6px;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 8px !important;
   }
-  .page-actions .btn { flex: 1; min-width: 120px; justify-content: center; }
+  .page-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+    min-height: 44px;
+    justify-content: center;
+    font-size: 0.82rem;
+  }
   .page-actions input[type="date"],
   .page-actions input[type="month"],
   .page-actions .input,
-  .page-actions .select { width: 100% !important; }
-
-  /* ── TABS ── */
-  .tabs {
-    overflow-x: auto; flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; padding-bottom: 2px;
-    gap: 4px;
+  .page-actions .select {
+    width: 100% !important;
+    min-height: 44px;
   }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab { flex-shrink: 0; white-space: nowrap; padding: 7px 12px; font-size: 0.82rem; }
+  .page-actions > div { width: 100%; }
 
-  /* Selector móvil de tabs (tabs-mobile-select) */
-  .tabs-mobile-select { display: block; }
-  .tabs-desktop { display: none; }
+  /* Tabs — scroll en móvil, todos visibles igual que PC */
+  .tabs { margin-bottom: 12px; }
+  .tab { padding: 7px 12px; font-size: 0.8rem; }
 
-  /* ── CARDS ── */
-  .card { padding: 12px; border-radius: 10px; }
+  /* Cards */
+  .card { padding: 12px; border-radius: 12px; }
 
-  /* ── STATS ── */
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  /* Stats 2 columnas */
+  .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
   .stat-card { padding: 10px 12px; }
   .stat-value { font-size: 1.2rem; }
 
-  /* ── TABLAS ── */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 460px; font-size: 0.82rem; }
-  thead th { padding: 7px 8px; font-size: 0.7rem; }
-  tbody td { padding: 7px 8px; }
+  /* Tablas — scroll horizontal */
+  .table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+  }
+  table { min-width: 480px; font-size: 0.82rem; }
+  thead th { padding: 8px 10px; font-size: 0.7rem; }
+  tbody td { padding: 8px 10px; }
 
-  /* ── BOTONES ── */
-  .btn { min-height: 44px; }
-  .btn-sm { min-height: 38px; padding: 6px 10px; font-size: 0.8rem; }
-  .btn-icon { min-height: 38px; min-width: 38px; }
+  /* Botones táctiles mínimo 44px */
+  .btn { min-height: 44px !important; }
+  .btn-sm { min-height: 40px !important; padding: 6px 10px; font-size: 0.8rem; }
+  .btn-icon { min-height: 40px !important; min-width: 40px !important; padding: 7px; }
 
-  /* ── FORMULARIOS ── */
-  .form-grid-2 { grid-template-columns: 1fr; gap: 8px; }
-  .input-group { margin-bottom: 10px; }
-  .input, .select, .textarea { min-height: 44px; }
+  /* Formularios */
+  .form-grid-2 { grid-template-columns: 1fr !important; gap: 10px; }
+  .input-group { margin-bottom: 12px; }
+  .input, .select { min-height: 46px; }
 
-  /* ── MODALES ── */
+  /* Modales — sube desde abajo (nativo iOS/Android) */
   .modal-overlay { align-items: flex-end !important; padding: 0 !important; }
   .modal {
-    max-width: 100% !important; width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 24px 24px 0 0 !important;
     max-height: 92dvh !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
-  .modal-header { padding: 16px 16px 10px; }
-  .modal-body { padding: 12px 16px; }
-  .modal-footer { padding: 12px 16px; gap: 8px; }
-  .modal-title { font-size: 1.05rem; }
+  .modal-header { padding: 18px 16px 12px !important; }
+  .modal-body { padding: 12px 16px !important; -webkit-overflow-scrolling: touch; }
+  .modal-footer {
+    padding: 14px 16px !important;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #f5e8d8;
+    display: flex;
+    gap: 10px;
+  }
+  .modal-footer .btn { flex: 1; min-height: 48px; }
+  .modal-title { font-size: 1.1rem !important; }
 
-  /* ── BADGES ── */
-  .badge { font-size: 0.65rem; padding: 2px 7px; }
+  /* SearchableSelect dropdown */
+  #searchable-select-portal {
+    max-height: 50dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
 
-  /* ── TOASTS ── */
-  .toast-container { top: 8px; left: 8px; right: 8px; align-items: stretch; }
-  .toast { min-width: unset; font-size: 0.85rem; }
+  /* Badges */
+  .badge { font-size: 0.68rem; padding: 2px 8px; }
 
-  /* ── BUSCADORES ── */
+  /* Buscadores */
   .search-box { width: 100%; }
   .search-box input { width: 100% !important; }
 
-  /* ── SEARCHABLE SELECT PORTAL ── */
-  #searchable-select-portal { max-height: 55dvh !important; }
-
-  /* ── EMPTY STATE ── */
-  .empty-state { padding: 30px 12px; }
+  /* Toasts */
+  .toast-container { top: 8px !important; left: 10px !important; right: 10px !important; }
+  .toast { min-width: unset !important; font-size: 0.875rem; }
 }
 
-/* Pantalla muy pequeña */
+/* iPhone SE / muy pequeño */
 @media (max-width: 390px) {
-  .nav-item { min-width: 46px; padding: 5px 6px; }
-  .nav-item svg { width: 16px; height: 16px; }
-  .page-content { padding: 8px 6px; }
+  .nav-item { min-width: 50px; padding: 5px 7px; }
+  .nav-item svg { width: 18px !important; height: 18px !important; }
+  .nav-item span { font-size: 0.55rem !important; }
+  .page-content { padding: 8px 8px 80px; }
+  .page-title { font-size: 1.1rem !important; }
   table { min-width: 380px; }
+}
+
+/* TOASTS */
+.toast-container {
+  position: fixed; top: 16px; right: 16px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  background: white; border-radius: 12px; padding: 12px 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  display: flex; align-items: center; gap: 10px;
+  min-width: 260px; border-left: 4px solid var(--naranja);
+  animation: slideIn 0.3s ease; font-weight: 600; font-size: 0.875rem;
+}
+.toast.error { border-left-color: #dc2626; }
+.toast.success { border-left-color: #16a34a; }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
 }
