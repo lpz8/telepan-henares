@@ -234,61 +234,105 @@ export default function Facturas() {
     if (!confirm(`¿Generar facturas para ${MESES[parseInt(mes)]} ${anio}?\nSe eliminarán las ya existentes de ese mes.`)) return
     setLoading(true)
     try {
-      // FIX: usar fechaFinMes calculada correctamente (último día real del mes)
-      const { data: pedidos } = await supabase.from('pedidos')
-        .select('*, clientes(nombre, forma_pago, orden_ruta), productos(nombre)')
-        .gte('fecha', fechaInicioMes)
-        .lte('fecha', fechaFinMes)
-
-      if (!pedidos?.length) {
-        globalToast(`No hay pedidos para ${MESES[parseInt(mes)]} ${anio}. Genera primero los pedidos del mes en "Pedidos".`, 'info')
-        setLoading(false)
-        return
+      // Traer TODOS los pedidos del mes — paginación para no perder ninguno (Supabase límite 1000/página)
+      let pedidos: any[] = []
+      let page = 0
+      const PAGE = 1000
+      while (true) {
+        const { data: chunk, error: pedErr } = await supabase
+          .from('pedidos')
+          .select('id, cliente_id, producto_id, fecha, cantidad, precio, iva, clientes(id, nombre, codigo, direccion, codigo_postal, poblacion, forma_pago, orden_ruta), productos(nombre)')
+          .gte('fecha', fechaInicioMes)
+          .lte('fecha', fechaFinMes)
+          .range(page * PAGE, (page + 1) * PAGE - 1)
+        if (pedErr) { globalToast('Error al leer pedidos: ' + pedErr.message, 'error'); setLoading(false); return }
+        if (!chunk || chunk.length === 0) break
+        pedidos = pedidos.concat(chunk)
+        if (chunk.length < PAGE) break
+        page++
       }
 
+      console.log(`Pedidos encontrados para ${fechaInicioMes} - ${fechaFinMes}: ${pedidos.length}`)
+
+      if (!pedidos.length) {
+        globalToast(`No hay pedidos para ${MESES[parseInt(mes)]} ${anio}. Genera primero los pedidos del mes en "Pedidos".`, 'info')
+        setLoading(false); return
+      }
+
+      // Borrar facturas existentes del mes
       const { data: existing } = await supabase.from('facturas').select('id').eq('mes', `${anio}-${mesNum}`).eq('user_id', user.id)
       if (existing?.length) {
         for (const f of existing) await supabase.from('lineas_factura').delete().eq('factura_id', f.id)
         await supabase.from('facturas').delete().eq('mes', `${anio}-${mesNum}`).eq('user_id', user.id)
       }
 
+      // Agrupar por cliente
       const byClient: Record<string, any[]> = {}
-      pedidos.forEach(p => { if (!byClient[p.cliente_id]) byClient[p.cliente_id]=[]; byClient[p.cliente_id].push(p) })
+      for (const p of pedidos) {
+        if (!byClient[p.cliente_id]) byClient[p.cliente_id] = []
+        byClient[p.cliente_id].push(p)
+      }
 
       const { data: config } = await supabase.from('configuracion').select('num_inicio_facturas').single()
       let num = config?.num_inicio_facturas || 1
 
-      // Ordenar clientes por orden_ruta
-      const clientesOrdenados = Object.entries(byClient).sort(([, a], [, b]) => {
-        const orA = a[0]?.clientes?.orden_ruta || 999
-        const orB = b[0]?.clientes?.orden_ruta || 999
-        return orA - orB
-      })
+      const clientesOrdenados = Object.entries(byClient).sort(([, a], [, b]) =>
+        (a[0]?.clientes?.orden_ruta || 999) - (b[0]?.clientes?.orden_ruta || 999)
+      )
+
+      let generadas = 0
+      const errores: string[] = []
 
       for (const [clienteId, items] of clientesOrdenados) {
-        const b4 = items.filter(p=>Number(p.iva)<=4).reduce((s,p)=>s+Number(p.cantidad)*Number(p.precio),0)
-        const b10 = items.filter(p=>Number(p.iva)>4&&Number(p.iva)<=10).reduce((s,p)=>s+Number(p.cantidad)*Number(p.precio),0)
-        const b21 = items.filter(p=>Number(p.iva)>10).reduce((s,p)=>s+Number(p.cantidad)*Number(p.precio),0)
-        const c4=b4*.04, c10=b10*.10, c21=b21*.21
-        const { data: fac } = await supabase.from('facturas').insert({
-          user_id: user.id,
-          numero: `F${anio}${mesNum}${String(num).padStart(3,'0')}`,
-          cliente_id: clienteId,
-          fecha: `${anio}-${mesNum}-${String(new Date().getDate()).padStart(2,'0')}`,
-          mes: `${anio}-${mesNum}`,
-          tipo_pago: items[0]?.clientes?.forma_pago||'Efectivo',
-          base: b4+b10+b21, iva_total: c4+c10+c21, total: b4+b10+b21+c4+c10+c21,
-          base4:b4, cuota4:c4, base10:b10, cuota10:c10, base21:b21, cuota21:c21,
-        }).select().single()
-        if (fac) {
-          const byP: Record<string,any>={}
-          items.forEach(p=>{ const n=p.productos?.nombre||'Prod'; if(!byP[n]) byP[n]={nombre:n,cantidad:0,precio:Number(p.precio),iva:Number(p.iva)}; byP[n].cantidad+=Number(p.cantidad) })
-          await supabase.from('lineas_factura').insert(Object.values(byP).map((l:any)=>({factura_id:fac.id,producto_nombre:l.nombre,cantidad:l.cantidad,precio:l.precio,iva:l.iva})))
+        const cliente = items[0]?.clientes
+        if (!cliente) continue
+
+        // Agrupar líneas por producto+precio+iva para sumar cantidades del mismo producto
+        const byKey: Record<string, any> = {}
+        for (const p of items) {
+          const precio = Number(p.precio || 0)
+          const iva = Number(p.iva || 4)
+          const key = `${p.productos?.nombre || 'Producto'}||${precio}||${iva}`
+          if (!byKey[key]) byKey[key] = { nombre: p.productos?.nombre || 'Producto', cantidad: 0, precio, iva }
+          byKey[key].cantidad += Number(p.cantidad)
         }
-        num++
+        const lineas = Object.values(byKey).filter(l => l.cantidad > 0)
+
+        // Calcular bases e IVAs
+        const b4  = lineas.filter(l => l.iva <= 4).reduce((s, l) => s + l.cantidad * l.precio, 0)
+        const b10 = lineas.filter(l => l.iva > 4 && l.iva <= 10).reduce((s, l) => s + l.cantidad * l.precio, 0)
+        const b21 = lineas.filter(l => l.iva > 10).reduce((s, l) => s + l.cantidad * l.precio, 0)
+        const c4 = b4 * 0.04, c10 = b10 * 0.10, c21 = b21 * 0.21
+        const totalFac = b4 + b10 + b21 + c4 + c10 + c21
+
+        if (totalFac === 0) continue // no generar facturas en cero
+
+        const numStr = `F${anio}${mesNum}${String(num).padStart(3, '0')}`
+        const fechaHoy = new Date().toISOString().split('T')[0]
+
+        const { data: fac, error: facErr } = await supabase.from('facturas').insert({
+          user_id: user.id, numero: numStr, cliente_id: clienteId,
+          fecha: fechaHoy, mes: `${anio}-${mesNum}`,
+          tipo_pago: cliente.forma_pago || 'Efectivo',
+          base: b4 + b10 + b21, iva_total: c4 + c10 + c21, total: totalFac,
+          base4: b4, cuota4: c4, base10: b10, cuota10: c10, base21: b21, cuota21: c21,
+        }).select().single()
+
+        if (facErr) { errores.push(`${cliente.nombre}: ${facErr.message}`); continue }
+
+        if (fac && lineas.length > 0) {
+          const { error: linErr } = await supabase.from('lineas_factura').insert(
+            lineas.map(l => ({ factura_id: fac.id, producto_nombre: l.nombre, cantidad: l.cantidad, precio: l.precio, iva: l.iva }))
+          )
+          if (linErr) errores.push(`Líneas de ${cliente.nombre}: ${linErr.message}`)
+        }
+        num++; generadas++
       }
-      globalToast(`✅ ${clientesOrdenados.length} facturas generadas ordenadas por ruta`); load()
-    } catch(err:any) { globalToast(err.message,'error') }
+
+      if (errores.length) globalToast(`⚠️ ${generadas} facturas OK, ${errores.length} errores: ${errores[0]}`, 'error')
+      else globalToast(`✅ ${generadas} facturas generadas para ${MESES[parseInt(mes)]} ${anio}`)
+      load()
+    } catch(err: any) { globalToast('Error inesperado: ' + err.message, 'error') }
     setLoading(false)
   }
 
@@ -334,6 +378,67 @@ export default function Facturas() {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
     const w = window.open('','_blank'); if(!w) return
     w.document.write(buildHTML(f, lineas||[])); w.document.close()
+    setTimeout(() => w.print(), 800)
+  }
+
+  // Cargar html2canvas desde CDN para generar JPG
+  const loadHtml2Canvas = (): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      if ((window as any).html2canvas) { resolve((window as any).html2canvas); return }
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+      s.onload = () => resolve((window as any).html2canvas)
+      s.onerror = () => reject(new Error('No se pudo cargar html2canvas'))
+      document.head.appendChild(s)
+    })
+  }
+
+  // Descargar factura como JPG
+  const descargarJPG = async (f: any, lineas: any[]): Promise<string | null> => {
+    try {
+      globalToast('⏳ Generando imagen...')
+      const h2c = await loadHtml2Canvas()
+      const html = buildHTML(f, lineas)
+      // Extraer el contenido del body
+      const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+      const bodyHTML = bodyMatch ? bodyMatch[1].replace(/<script[\s\S]*?<\/script>/gi,'') : ''
+
+      const div = document.createElement('div')
+      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:820px;background:white;padding:28px 32px;box-sizing:border-box;z-index:-999'
+      div.innerHTML = bodyHTML
+      document.body.appendChild(div)
+
+      await new Promise(r => setTimeout(r, 600)) // esperar render
+
+      const canvas = await h2c(div, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', logging: false
+      })
+      document.body.removeChild(div)
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.93)
+      // Descargar automáticamente
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `Factura_${f.numero}.jpg`
+      a.click()
+      return dataUrl
+    } catch (err: any) {
+      globalToast('Error generando imagen: ' + err.message, 'error')
+      return null
+    }
+  }
+
+  // Descargar PDF (abre ventana con print dialog)
+  const descargarPDF = async (f: any) => {
+    const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
+    const w = window.open('', '_blank'); if (!w) return
+    w.document.write(buildHTML(f, lineas || []))
+    w.document.close()
+    setTimeout(() => {
+      w.print()
+      globalToast('💡 En el diálogo de impresión: selecciona "Guardar como PDF"')
+    }, 800)
   }
 
   const printGroup = async (list: any[]) => {
@@ -353,22 +458,91 @@ export default function Facturas() {
     globalToast('Factura eliminada'); load()
   }
 
-  const whatsappFactura = async (f: any) => {
+  const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' | 'texto' = 'jpg') => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
     const tel = (f.clientes?.telefono1 || '').replace(/\D/g, '')
-    if (!tel) { globalToast(f.clientes?.nombre + ' no tiene telefono registrado', 'error'); return }
+    if (!tel) { globalToast(f.clientes?.nombre + ' no tiene teléfono registrado', 'error'); return }
+
     const mesIdx = parseInt(f.mes?.split('-')[1] || '1') - 1
     const mesLabel = MESES[mesIdx]
     const anio = f.mes?.split('-')[0]
     const lineasTxt = (lineas || []).map((l: any) =>
-      '- ' + l.producto_nombre + ': ' + l.cantidad + ' ud = ' + (Number(l.cantidad)*Number(l.precio)*(1+Number(l.iva||4)/100)).toFixed(2) + 'EUR'
+      `  • ${l.producto_nombre}: ${l.cantidad} ud × ${Number(l.precio).toFixed(2)}€ = ${(Number(l.cantidad)*Number(l.precio)*(1+Number(l.iva||4)/100)).toFixed(2)}€`
     ).join('\n')
-    const msg = encodeURIComponent(
-      'Hola ' + f.clientes?.nombre + ', su factura de ' + mesLabel + ' ' + anio + ':\n\n' +
-      lineasTxt + '\n\nTOTAL: ' + Number(f.total).toFixed(2) + 'EUR\nPago: ' + f.tipo_pago +
-      '\n\nGracias, TelePan Henares'
-    )
-    window.open('https://wa.me/34' + tel + '?text=' + msg, '_blank')
+    const formaPago = f.tipo_pago === 'Domiciliación'
+      ? '🔄 Domiciliación (se cargará en su cuenta)'
+      : f.tipo_pago === 'Transferencia'
+      ? '🏦 Transferencia\nIBAN: ES9420858284100330219325'
+      : f.tipo_pago === 'Bizum'
+      ? '📱 Bizum al 622334126'
+      : '💵 Efectivo al repartidor'
+    const mensaje =
+      `Hola ${f.clientes?.nombre} 👋\n\n` +
+      `📄 *FACTURA ${f.numero}*\n` +
+      `📅 Periodo: ${mesLabel} ${anio}\n\n` +
+      `*Detalle:*\n${lineasTxt}\n\n` +
+      `💰 *TOTAL: ${Number(f.total).toFixed(2)} €*\n` +
+      `*Pago:* ${formaPago}\n\n` +
+      `Adjuntamos la factura 📎\n` +
+      `Gracias 🍞 TelePan Henares · 633 958 532`
+
+    // URL del servidor WhatsApp (se configura en .env.local)
+    const SERVER_URL = (import.meta as any).env?.VITE_WA_SERVER_URL || ''
+    const API_KEY = (import.meta as any).env?.VITE_WA_API_KEY || ''
+
+    if (!SERVER_URL) {
+      // Fallback: si no hay servidor configurado, abrir WhatsApp normal
+      globalToast('⚠️ Servidor WhatsApp no configurado. Enviando texto...', 'info')
+      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+      return
+    }
+
+    if (formato === 'texto') {
+      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+      return
+    }
+
+    try {
+      globalToast('⏳ Generando factura y enviando...')
+
+      let imagen_base64: string | null = null
+
+      if (formato === 'jpg') {
+        // Generar JPG con html2canvas
+        imagen_base64 = await descargarJPG(f, lineas || [])
+        if (!imagen_base64) return
+        // Quitar el prefijo data:image/jpeg;base64,
+        imagen_base64 = imagen_base64.replace(/^data:image\/jpeg;base64,/, '')
+      } else if (formato === 'pdf') {
+        // Para PDF: generamos y descargamos localmente + enviamos texto al servidor
+        descargarPDF(f)
+        imagen_base64 = null
+      }
+
+      const resp = await fetch(`${SERVER_URL}/enviar-factura`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY
+        },
+        body: JSON.stringify({
+          telefono: tel,
+          mensaje,
+          imagen_base64,
+          nombre_archivo: `Factura_${f.numero}.${formato === 'pdf' ? 'pdf' : 'jpg'}`,
+          formato
+        })
+      })
+
+      const result = await resp.json()
+      if (result.ok) {
+        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} por WhatsApp`)
+      } else {
+        globalToast('❌ Error: ' + result.error, 'error')
+      }
+    } catch (err: any) {
+      globalToast('Error conectando con servidor: ' + err.message, 'error')
+    }
   }
 
   const whatsappTodos = async (list: any[]) => {
@@ -470,11 +644,15 @@ export default function Facturas() {
               </div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>openEdit(f)} title="Editar"><Edit2 size={13}/></button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>printOne(f)}><Printer size={13}/> PDF</button>
                 <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.78rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
-                  onClick={()=>f.clientes?.telefono1&&whatsappFactura(f)}
-                  title={f.clientes?.telefono1?'Enviar WhatsApp':'Sin telefono'}>
-                  WA
+                  onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'jpg')}
+                  title="Descargar JPG y abrir WhatsApp">
+                  📸 WA JPG
+                </button>
+                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.78rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
+                  onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'pdf')}
+                  title="Guardar PDF y abrir WhatsApp">
+                  📄 WA PDF
                 </button>
                 <button className="btn btn-danger btn-sm btn-icon" onClick={()=>deleteFactura(f.id)}><Trash2 size={13}/></button>
               </div>
