@@ -491,7 +491,6 @@ export default function Facturas() {
     const API_KEY = (import.meta as any).env?.VITE_WA_API_KEY || ''
 
     if (!SERVER_URL) {
-      // Fallback: si no hay servidor configurado, abrir WhatsApp normal
       globalToast('⚠️ Servidor WhatsApp no configurado. Enviando texto...', 'info')
       window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
       return
@@ -503,45 +502,33 @@ export default function Facturas() {
     }
 
     try {
-      globalToast('⏳ Generando factura y enviando...')
+      globalToast('⏳ Generando factura JPG y enviando por WhatsApp...')
 
-      let imagen_base64: string | null = null
+      // Obtener el HTML de la factura
+      const html = buildHTML(f, lineas || [])
 
-      if (formato === 'jpg') {
-        // Generar JPG con html2canvas
-        imagen_base64 = await descargarJPG(f, lineas || [])
-        if (!imagen_base64) return
-        // Quitar el prefijo data:image/jpeg;base64,
-        imagen_base64 = imagen_base64.replace(/^data:image\/jpeg;base64,/, '')
-      } else if (formato === 'pdf') {
-        // Para PDF: generamos y descargamos localmente + enviamos texto al servidor
-        descargarPDF(f)
-        imagen_base64 = null
-      }
-
-      const resp = await fetch(`${SERVER_URL}/enviar-factura`, {
+      const resp = await fetch(`${SERVER_URL}/enviar-factura-html`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY
-        },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
         body: JSON.stringify({
           telefono: tel,
           mensaje,
-          imagen_base64,
-          nombre_archivo: `Factura_${f.numero}.${formato === 'pdf' ? 'pdf' : 'jpg'}`,
-          formato
+          html,
+          numero_factura: f.numero
         })
       })
 
       const result = await resp.json()
       if (result.ok) {
-        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} por WhatsApp`)
+        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} 📸`)
       } else {
-        globalToast('❌ Error: ' + result.error, 'error')
+        // Si falla el JPG, enviar solo el texto por WhatsApp normal
+        globalToast('⚠️ No se pudo generar JPG. Enviando por WhatsApp...', 'info')
+        window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
       }
     } catch (err: any) {
-      globalToast('Error conectando con servidor: ' + err.message, 'error')
+      globalToast('Error: ' + err.message + ' — Enviando texto...', 'error')
+      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
     }
   }
 
