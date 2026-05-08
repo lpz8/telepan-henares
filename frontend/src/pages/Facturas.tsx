@@ -458,7 +458,7 @@ export default function Facturas() {
     globalToast('Factura eliminada'); load()
   }
 
-  const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' | 'texto' = 'jpg') => {
+  const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' = 'jpg') => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
     const tel = (f.clientes?.telefono1 || '').replace(/\D/g, '')
     if (!tel) { globalToast(f.clientes?.nombre + ' no tiene teléfono registrado', 'error'); return }
@@ -483,52 +483,37 @@ export default function Facturas() {
       `*Detalle:*\n${lineasTxt}\n\n` +
       `💰 *TOTAL: ${Number(f.total).toFixed(2)} €*\n` +
       `*Pago:* ${formaPago}\n\n` +
-      `Adjuntamos la factura 📎\n` +
       `Gracias 🍞 TelePan Henares · 633 958 532`
 
-    // URL del servidor WhatsApp (se configura en .env.local)
     const SERVER_URL = (import.meta as any).env?.VITE_WA_SERVER_URL || ''
     const API_KEY = (import.meta as any).env?.VITE_WA_API_KEY || ''
 
     if (!SERVER_URL) {
-      globalToast('⚠️ Servidor WhatsApp no configurado. Enviando texto...', 'info')
-      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+      globalToast('⚠️ Servidor no configurado. Añade VITE_WA_SERVER_URL en Vercel', 'error')
       return
     }
 
-    if (formato === 'texto') {
-      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
-      return
-    }
+    const html = buildHTML(f, lineas || [])
+    const endpoint = formato === 'pdf' ? '/enviar-factura-pdf' : '/enviar-factura-jpg'
+    const label = formato === 'pdf' ? 'PDF' : 'imagen JPG'
 
     try {
-      globalToast('⏳ Generando factura JPG y enviando por WhatsApp...')
-
-      // Obtener el HTML de la factura
-      const html = buildHTML(f, lineas || [])
-
-      const resp = await fetch(`${SERVER_URL}/enviar-factura-html`, {
+      globalToast(`⏳ Generando ${label} y enviando por WhatsApp...`)
+      const resp = await fetch(`${SERVER_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-        body: JSON.stringify({
-          telefono: tel,
-          mensaje,
-          html,
-          numero_factura: f.numero
-        })
+        body: JSON.stringify({ telefono: tel, mensaje, html, numero_factura: f.numero })
       })
-
       const result = await resp.json()
       if (result.ok) {
-        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} 📸`)
+        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} como ${label} 📎`)
       } else {
-        // Si falla el JPG, enviar solo el texto por WhatsApp normal
-        globalToast('⚠️ No se pudo generar JPG. Enviando por WhatsApp...', 'info')
-        window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+        globalToast('❌ Error: ' + result.error, 'error')
+        console.error('Error servidor WA:', result.error)
       }
     } catch (err: any) {
-      globalToast('Error: ' + err.message + ' — Enviando texto...', 'error')
-      window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+      globalToast('Error de conexión con servidor: ' + err.message, 'error')
+      console.error('Error conexión WA:', err)
     }
   }
 
@@ -631,15 +616,21 @@ export default function Facturas() {
               </div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>openEdit(f)} title="Editar"><Edit2 size={13}/></button>
-                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.78rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
+                {/* WA JPG */}
+                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.75rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed',display:'flex',alignItems:'center',gap:3}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'jpg')}
-                  title="Descargar JPG y abrir WhatsApp">
-                  📸 WA JPG
+                  title="Enviar como imagen JPG por WhatsApp">
+                  📸 JPG
                 </button>
-                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.78rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
+                {/* WA PDF */}
+                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.75rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed',display:'flex',alignItems:'center',gap:3}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'pdf')}
-                  title="Guardar PDF y abrir WhatsApp">
-                  📄 WA PDF
+                  title="Enviar como PDF por WhatsApp">
+                  📄 PDF
+                </button>
+                {/* Descargar PDF local */}
+                <button className="btn btn-secondary btn-sm" onClick={()=>printOne(f)} title="Descargar/Imprimir PDF">
+                  🖨️
                 </button>
                 <button className="btn btn-danger btn-sm btn-icon" onClick={()=>deleteFactura(f.id)}><Trash2 size={13}/></button>
               </div>
