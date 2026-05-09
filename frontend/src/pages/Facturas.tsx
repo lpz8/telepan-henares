@@ -381,66 +381,6 @@ export default function Facturas() {
     setTimeout(() => w.print(), 800)
   }
 
-  // Cargar html2canvas desde CDN para generar JPG
-  const loadHtml2Canvas = (): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      if ((window as any).html2canvas) { resolve((window as any).html2canvas); return }
-      const s = document.createElement('script')
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
-      s.onload = () => resolve((window as any).html2canvas)
-      s.onerror = () => reject(new Error('No se pudo cargar html2canvas'))
-      document.head.appendChild(s)
-    })
-  }
-
-  // Descargar factura como JPG
-  const descargarJPG = async (f: any, lineas: any[]): Promise<string | null> => {
-    try {
-      globalToast('⏳ Generando imagen...')
-      const h2c = await loadHtml2Canvas()
-      const html = buildHTML(f, lineas)
-      // Extraer el contenido del body
-      const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
-      const bodyHTML = bodyMatch ? bodyMatch[1].replace(/<script[\s\S]*?<\/script>/gi,'') : ''
-
-      const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:820px;background:white;padding:28px 32px;box-sizing:border-box;z-index:-999'
-      div.innerHTML = bodyHTML
-      document.body.appendChild(div)
-
-      await new Promise(r => setTimeout(r, 600)) // esperar render
-
-      const canvas = await h2c(div, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#ffffff', logging: false
-      })
-      document.body.removeChild(div)
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.93)
-      // Descargar automáticamente
-      const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = `Factura_${f.numero}.jpg`
-      a.click()
-      return dataUrl
-    } catch (err: any) {
-      globalToast('Error generando imagen: ' + err.message, 'error')
-      return null
-    }
-  }
-
-  // Descargar PDF (abre ventana con print dialog)
-  const descargarPDF = async (f: any) => {
-    const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
-    const w = window.open('', '_blank'); if (!w) return
-    w.document.write(buildHTML(f, lineas || []))
-    w.document.close()
-    setTimeout(() => {
-      w.print()
-      globalToast('💡 En el diálogo de impresión: selecciona "Guardar como PDF"')
-    }, 800)
-  }
-
   const printGroup = async (list: any[]) => {
     for (const f of list) {
       const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
@@ -458,10 +398,68 @@ export default function Facturas() {
     globalToast('Factura eliminada'); load()
   }
 
+  // Descargar factura como PDF
+  const descargarPDF = async (f: any) => {
+    const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
+    const html = buildHTML(f, lineas || [])
+    const w = window.open('', '_blank')
+    if (!w) { globalToast('Permite las ventanas emergentes en el navegador', 'error'); return }
+    w.document.write(html)
+    w.document.close()
+    setTimeout(() => {
+      w.print()
+      globalToast('✅ PDF listo — en el diálogo: "Guardar como PDF" → adjúntalo en WhatsApp 📎')
+    }, 800)
+  }
+
+  // Descargar factura como JPG usando html2canvas
+  const descargarJPG = async (f: any) => {
+    const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
+    globalToast('⏳ Generando imagen JPG...')
+    try {
+      // Cargar html2canvas si no está cargado
+      if (!(window as any).html2canvas) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+          s.onload = () => resolve()
+          s.onerror = () => reject(new Error('No se pudo cargar html2canvas'))
+          document.head.appendChild(s)
+        })
+      }
+      const h2c = (window as any).html2canvas
+      const html = buildHTML(f, lineas || [])
+      // Crear un iframe oculto para renderizar la factura
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:none;z-index:-1'
+      document.body.appendChild(iframe)
+      iframe.contentDocument!.open()
+      iframe.contentDocument!.write(html)
+      iframe.contentDocument!.close()
+      await new Promise(r => setTimeout(r, 1500))
+      const canvas = await h2c(iframe.contentDocument!.body, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', logging: false,
+        width: 794, windowWidth: 794
+      })
+      document.body.removeChild(iframe)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `Factura_${f.numero}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      globalToast('✅ JPG descargado — adjúntalo en WhatsApp con el clip 📎')
+    } catch (err: any) {
+      globalToast('Error generando JPG: ' + err.message, 'error')
+    }
+  }
+
   const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' = 'jpg') => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
     const tel = (f.clientes?.telefono1 || '').replace(/\D/g, '')
-    if (!tel) { globalToast(f.clientes?.nombre + ' no tiene teléfono registrado', 'error'); return }
+    if (!tel) { globalToast(f.clientes?.nombre + ' no tiene teléfono', 'error'); return }
 
     const mesIdx = parseInt(f.mes?.split('-')[1] || '1') - 1
     const mesLabel = MESES[mesIdx]
@@ -469,12 +467,9 @@ export default function Facturas() {
     const lineasTxt = (lineas || []).map((l: any) =>
       `  • ${l.producto_nombre}: ${l.cantidad} ud × ${Number(l.precio).toFixed(2)}€ = ${(Number(l.cantidad)*Number(l.precio)*(1+Number(l.iva||4)/100)).toFixed(2)}€`
     ).join('\n')
-    const formaPago = f.tipo_pago === 'Domiciliación'
-      ? '🔄 Domiciliación (se cargará en su cuenta)'
-      : f.tipo_pago === 'Transferencia'
-      ? '🏦 Transferencia\nIBAN: ES9420858284100330219325'
-      : f.tipo_pago === 'Bizum'
-      ? '📱 Bizum al 622334126'
+    const formaPago = f.tipo_pago === 'Domiciliación' ? '🔄 Domiciliación (cargo automático)'
+      : f.tipo_pago === 'Transferencia' ? '🏦 Transferencia\nIBAN: ES9420858284100330219325'
+      : f.tipo_pago === 'Bizum' ? '📱 Bizum al 622334126'
       : '💵 Efectivo al repartidor'
     const mensaje =
       `Hola ${f.clientes?.nombre} 👋\n\n` +
@@ -488,48 +483,49 @@ export default function Facturas() {
     const SERVER_URL = (import.meta as any).env?.VITE_WA_SERVER_URL || ''
     const API_KEY = (import.meta as any).env?.VITE_WA_API_KEY || ''
 
-    if (!SERVER_URL) {
-      globalToast('⚠️ Servidor no configurado. Añade VITE_WA_SERVER_URL en Vercel', 'error')
-      return
-    }
-
-    const html = buildHTML(f, lineas || [])
-    const endpoint = formato === 'pdf' ? '/enviar-factura-pdf' : '/enviar-factura-jpg'
-    const label = formato === 'pdf' ? 'PDF' : 'imagen JPG'
-
-    try {
-      globalToast(`⏳ Generando ${label} y enviando por WhatsApp...`)
-      const resp = await fetch(`${SERVER_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-        body: JSON.stringify({ telefono: tel, mensaje, html, numero_factura: f.numero })
-      })
-      const result = await resp.json()
-      if (result.ok) {
-        globalToast(`✅ Factura enviada a ${f.clientes?.nombre} como ${label} 📎`)
-      } else {
-        globalToast('❌ Error: ' + result.error, 'error')
-        console.error('Error servidor WA:', result.error)
+    // Si hay servidor disponible, enviar con archivo adjunto
+    if (SERVER_URL) {
+      try {
+        globalToast(`⏳ Enviando factura ${formato.toUpperCase()} a ${f.clientes?.nombre}...`)
+        const html = buildHTML(f, lineas || [])
+        const endpoint = formato === 'pdf' ? '/enviar-factura-pdf' : '/enviar-factura-jpg'
+        const resp = await fetch(`${SERVER_URL}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+          body: JSON.stringify({ telefono: tel, mensaje, html, numero_factura: f.numero })
+        })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const result = await resp.json()
+        if (result.ok) {
+          globalToast(`✅ Factura enviada a ${f.clientes?.nombre} como ${formato.toUpperCase()} 📎`)
+          return
+        }
+        throw new Error(result.error || 'Error servidor')
+      } catch (err: any) {
+        console.warn('Servidor no disponible, enviando texto:', err.message)
+        // Si falla el servidor, abrir WhatsApp con texto
       }
-    } catch (err: any) {
-      globalToast('Error de conexión con servidor: ' + err.message, 'error')
-      console.error('Error conexión WA:', err)
     }
+
+    // Fallback: WhatsApp con texto
+    window.open(`https://wa.me/34${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
+    globalToast('💡 Servidor no activo — adjunta el archivo manualmente con el clip 📎')
   }
 
+  // Enviar a todos los del grupo
   const whatsappTodos = async (list: any[]) => {
-    const sinTel = list.filter(f => !f.clientes?.telefono1)
-    if (sinTel.length > 0) {
-      const nombres = sinTel.map((f: any) => f.clientes?.nombre).join(', ')
-      if (!confirm(sinTel.length + ' clientes sin telefono seran omitidos: ' + nombres + '\n\nContinuar con los demas?')) return
-    }
+    if (!confirm(`¿Enviar facturas a ${list.length} clientes? Se abrirá WhatsApp para cada uno.`)) return
+    let enviados = 0
     for (const f of list) {
       if (!f.clientes?.telefono1) continue
-      await whatsappFactura(f)
-      await new Promise(r => setTimeout(r, 800))
+      await whatsappFactura(f, 'jpg')
+      enviados++
+      await new Promise(r => setTimeout(r, 2000))
     }
-    globalToast('Enviado a ' + list.filter(f => f.clientes?.telefono1).length + ' clientes')
+    globalToast(`✅ ${enviados} facturas enviadas`)
   }
+
+
 
   const filtered = getFilteredFacturas(facturas, tab).filter(f => {
     if (!busquedaCliente.trim()) return true
@@ -616,22 +612,20 @@ export default function Facturas() {
               </div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>openEdit(f)} title="Editar"><Edit2 size={13}/></button>
-                {/* WA JPG */}
-                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.75rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed',display:'flex',alignItems:'center',gap:3}}
+                {/* Descargar JPG al PC */}
+                <button style={{background:'#f59e0b',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:'pointer'}}
+                  onClick={()=>descargarJPG(f)} title="Descargar JPG">⬇️JPG</button>
+                {/* Descargar PDF al PC */}
+                <button style={{background:'#7c3aed',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:'pointer'}}
+                  onClick={()=>descargarPDF(f)} title="Descargar PDF">⬇️PDF</button>
+                {/* Enviar JPG por WA */}
+                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'jpg')}
-                  title="Enviar como imagen JPG por WhatsApp">
-                  📸 JPG
-                </button>
-                {/* WA PDF */}
-                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'6px 10px',fontSize:'0.75rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed',display:'flex',alignItems:'center',gap:3}}
+                  title="Enviar JPG por WhatsApp">📸WA</button>
+                {/* Enviar PDF por WA */}
+                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'pdf')}
-                  title="Enviar como PDF por WhatsApp">
-                  📄 PDF
-                </button>
-                {/* Descargar PDF local */}
-                <button className="btn btn-secondary btn-sm" onClick={()=>printOne(f)} title="Descargar/Imprimir PDF">
-                  🖨️
-                </button>
+                  title="Enviar PDF por WhatsApp">📄WA</button>
                 <button className="btn btn-danger btn-sm btn-icon" onClick={()=>deleteFactura(f.id)}><Trash2 size={13}/></button>
               </div>
             </div>
