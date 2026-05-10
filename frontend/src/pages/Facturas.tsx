@@ -398,23 +398,74 @@ export default function Facturas() {
     globalToast('Factura eliminada'); load()
   }
 
-  // Descargar factura como PDF
+  // Descargar factura como PDF usando blob
+  // Cargar jsPDF desde CDN
+  const loadJsPDF = async () => {
+    if ((window as any).jspdf) return (window as any).jspdf.jsPDF
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+      s.onload = () => resolve()
+      s.onerror = () => reject(new Error('Error cargando jsPDF'))
+      document.head.appendChild(s)
+    })
+    return (window as any).jspdf.jsPDF
+  }
+
+  // Descargar factura como PDF real
   const descargarPDF = async (f: any) => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
-    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '').trim()
+    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, '').trim()
     const mesLabel = MESES[parseInt(f.mes?.split('-')[1] || '1') - 1]
     const anio = f.mes?.split('-')[0]
-    const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}`
-    const html = buildHTML(f, lineas || [])
-    const w = window.open('', '_blank')
-    if (!w) { globalToast('Permite las ventanas emergentes en el navegador', 'error'); return }
-    // Añadir título al documento para que el PDF tenga el nombre correcto
-    w.document.write(html.replace('<title>', `<title>${nombreArchivo} — `))
-    w.document.close()
-    setTimeout(() => {
-      w.print()
-      globalToast(`✅ Guarda como: ${nombreArchivo}.pdf`)
-    }, 800)
+    const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}.pdf`
+    globalToast('⏳ Generando PDF...')
+    try {
+      // Primero generar el JPG con html2canvas
+      const h2c = await loadH2C()
+      const JsPDF = await loadJsPDF()
+      const html = buildHTML(f, lineas || [])
+
+      // Renderizar en iframe
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1130px;border:none;visibility:hidden'
+      document.body.appendChild(iframe)
+      iframe.contentDocument!.open()
+      iframe.contentDocument!.write(html)
+      iframe.contentDocument!.close()
+      await new Promise(r => setTimeout(r, 2000))
+
+      const canvas = await h2c(iframe.contentDocument!.body, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', logging: false,
+        width: 800, windowWidth: 800
+      })
+      document.body.removeChild(iframe)
+
+      // Crear PDF A4 con la imagen
+      const imgData = canvas.toDataURL('image/jpeg', 0.97)
+      const pdf = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const imgH = (canvas.height * pdfW) / canvas.width
+
+      if (imgH <= pdfH) {
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, imgH)
+      } else {
+        // Si es más alto que una página, dividir en páginas
+        let yPos = 0
+        while (yPos < imgH) {
+          if (yPos > 0) pdf.addPage()
+          pdf.addImage(imgData, 'JPEG', 0, -yPos, pdfW, imgH)
+          yPos += pdfH
+        }
+      }
+
+      pdf.save(nombreArchivo)
+      globalToast(`✅ ${nombreArchivo} descargado`)
+    } catch (err: any) {
+      globalToast('Error PDF: ' + err.message, 'error')
+    }
   }
 
   // Cargar html2canvas una sola vez
@@ -493,11 +544,14 @@ export default function Facturas() {
   // Descargar TODAS las facturas como PDF de una vez
   const descargarTodosPDF = async (list: any[]) => {
     if (!confirm(`¿Descargar ${list.length} facturas como PDF?`)) return
+    globalToast(`⏳ Generando ${list.length} PDFs...`)
+    let ok = 0
     for (const f of list) {
       await descargarPDF(f)
-      await new Promise(r => setTimeout(r, 1500))
+      ok++
+      await new Promise(r => setTimeout(r, 1000))
     }
-    globalToast(`✅ ${list.length} facturas PDF abiertas para guardar`)
+    globalToast(`✅ ${ok} facturas PDF descargadas`)
   }
 
   const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' = 'jpg') => {
