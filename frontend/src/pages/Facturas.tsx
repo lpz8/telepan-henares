@@ -433,7 +433,7 @@ export default function Facturas() {
 
       // Crear div oculto con el CSS inline
       const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white;z-index:-1;font-family:Arial,sans-serif'
+      div.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;background:white;z-index:-9999;opacity:0;pointer-events:none;font-family:Arial,sans-serif'
       const styleEl = document.createElement('style')
       styleEl.textContent = css
       div.appendChild(styleEl)
@@ -514,7 +514,7 @@ export default function Facturas() {
       const body = bodyMatch ? bodyMatch[1] : ''
 
       const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white;z-index:-1;font-family:Arial,sans-serif'
+      div.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;background:white;z-index:-9999;opacity:0;pointer-events:none;font-family:Arial,sans-serif'
       const styleEl = document.createElement('style')
       styleEl.textContent = css
       div.appendChild(styleEl)
