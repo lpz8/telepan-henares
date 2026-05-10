@@ -426,29 +426,21 @@ export default function Facturas() {
       const html = buildHTML(f, lineas || [])
 
       // Extraer solo el CSS y el body del HTML
-      const cssMatch = html.match(/<style>([\s\S]*?)<\/style>/i)
-      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-      const css = cssMatch ? cssMatch[1] : ''
-      const body = bodyMatch ? bodyMatch[1] : ''
-
-      // Crear div oculto con el CSS inline
-      const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;background:white;z-index:-9999;opacity:0;pointer-events:none;font-family:Arial,sans-serif'
-      const styleEl = document.createElement('style')
-      styleEl.textContent = css
-      div.appendChild(styleEl)
-      const contentDiv = document.createElement('div')
-      contentDiv.innerHTML = body
-      div.appendChild(contentDiv)
-      document.body.appendChild(div)
+      // Crear contenedor oculto con HTML completo
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white'
+      container.innerHTML = html
+      container.querySelectorAll('script').forEach(s => s.remove())
+      document.body.appendChild(container)
       await new Promise(r => setTimeout(r, 1800))
 
-      const canvas = await h2c(div, {
+      const target = container.querySelector('body') || container
+      const canvas = await h2c(target as HTMLElement, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#ffffff', logging: false,
         width: 800, windowWidth: 800
       })
-      document.body.removeChild(div)
+      document.body.removeChild(container)
 
       // Generar PDF A4 con la imagen — sin abrir nada
       const imgData = canvas.toDataURL('image/jpeg', 0.97)
@@ -508,28 +500,23 @@ export default function Facturas() {
       const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
 
-      const cssMatch = html.match(/<style>([\s\S]*?)<\/style>/i)
-      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-      const css = cssMatch ? cssMatch[1] : ''
-      const body = bodyMatch ? bodyMatch[1] : ''
-
-      const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;background:white;z-index:-9999;opacity:0;pointer-events:none;font-family:Arial,sans-serif'
-      const styleEl = document.createElement('style')
-      styleEl.textContent = css
-      div.appendChild(styleEl)
-      const contentDiv = document.createElement('div')
-      contentDiv.innerHTML = body
-      div.appendChild(contentDiv)
-      document.body.appendChild(div)
+      // Crear contenedor oculto con HTML completo
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white'
+      container.innerHTML = html
+      // Quitar scripts para evitar ejecucion
+      container.querySelectorAll('script').forEach(s => s.remove())
+      document.body.appendChild(container)
       await new Promise(r => setTimeout(r, 1800))
 
-      const canvas = await h2c(div, {
+      // Capturar el elemento con la factura (el body dentro del html inyectado)
+      const target = container.querySelector('body') || container
+      const canvas = await h2c(target as HTMLElement, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#ffffff', logging: false,
         width: 800, windowWidth: 800
       })
-      document.body.removeChild(div)
+      document.body.removeChild(container)
 
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/jpeg', 0.97)
