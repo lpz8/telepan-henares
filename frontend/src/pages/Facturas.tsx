@@ -433,21 +433,23 @@ export default function Facturas() {
       const html = buildHTML(f, lineas || [])
 
       // Extraer solo el CSS y el body del HTML
-      // Crear contenedor oculto con HTML completo
-      const container = document.createElement('div')
-      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white'
-      container.innerHTML = html
-      container.querySelectorAll('script').forEach(s => s.remove())
-      document.body.appendChild(container)
-      await new Promise(r => setTimeout(r, 1800))
+      // Renderizar HTML completo en iframe usando blob URL
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1200px;border:none'
+      iframe.src = blobUrl
+      document.body.appendChild(iframe)
+      await new Promise<void>(resolve => { iframe.onload = () => resolve() })
+      await new Promise(r => setTimeout(r, 1000))
 
-      const target = container.querySelector('body') || container
-      const canvas = await h2c(target as HTMLElement, {
+      const canvas = await h2c(iframe.contentDocument!.body, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#ffffff', logging: false,
         width: 800, windowWidth: 800
       })
-      document.body.removeChild(container)
+      document.body.removeChild(iframe)
+      URL.revokeObjectURL(blobUrl)
 
       // Generar PDF A4 con la imagen — sin abrir nada
       const imgData = canvas.toDataURL('image/jpeg', 0.97)
@@ -507,23 +509,23 @@ export default function Facturas() {
       const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
 
-      // Crear contenedor oculto con HTML completo
-      const container = document.createElement('div')
-      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white'
-      container.innerHTML = html
-      // Quitar scripts para evitar ejecucion
-      container.querySelectorAll('script').forEach(s => s.remove())
-      document.body.appendChild(container)
-      await new Promise(r => setTimeout(r, 1800))
+      // Renderizar HTML completo en iframe usando blob URL
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1200px;border:none'
+      iframe.src = blobUrl
+      document.body.appendChild(iframe)
+      await new Promise<void>(resolve => { iframe.onload = () => resolve() })
+      await new Promise(r => setTimeout(r, 1000))
 
-      // Capturar el elemento con la factura (el body dentro del html inyectado)
-      const target = container.querySelector('body') || container
-      const canvas = await h2c(target as HTMLElement, {
+      const canvas = await h2c(iframe.contentDocument!.body, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#ffffff', logging: false,
         width: 800, windowWidth: 800
       })
-      document.body.removeChild(container)
+      document.body.removeChild(iframe)
+      URL.revokeObjectURL(blobUrl)
 
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/jpeg', 0.97)
