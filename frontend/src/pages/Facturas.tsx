@@ -59,29 +59,36 @@ function buildHTML(factura: any, lineas: any[]) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Nunito',Arial,sans-serif;padding:36px 48px;max-width:800px;margin:0 auto;color:#1a1a1a;font-size:12.5px;background:white}
-.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E8670A;padding-bottom:16px;margin-bottom:22px}
-.logo{width:80px;height:55px;object-fit:contain}
-.emisor{font-size:0.78rem;color:#555;margin-top:6px;line-height:1.7}
-.emisor strong{color:#5a2d0c}
+html,body{width:800px;background:white}
+body{font-family:'Helvetica Neue',Arial,sans-serif;padding:48px 56px 48px 56px;color:#1a1a1a;font-size:13px;line-height:1.5}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E8670A;padding-bottom:20px;margin-bottom:24px}
+.logo{width:80px;height:56px;object-fit:contain}
+.emisor{font-size:0.8rem;color:#555;margin-top:8px;line-height:1.8}
+.emisor strong{color:#3d1a00;font-size:0.85rem}
 .factura-title{text-align:right}
-.factura-title h1{font-size:1.5rem;font-weight:900;color:#E8670A;margin-bottom:6px}
-.factura-num{font-size:1.05rem;font-weight:900;color:#5a2d0c;background:#fff8f0;border:2px solid #E8670A;border-radius:8px;padding:4px 14px;display:inline-block;margin-bottom:6px}
-.factura-fecha{font-size:0.8rem;color:#888}
-.datos-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:16px}
-.box{background:#fff8f0;border:1.5px solid #f5e8d8;border-radius:10px;padding:11px 14px}
-.box-title{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;color:#E8670A;font-weight:900;display:block;margin-bottom:5px;border-bottom:1px solid #f5e8d8;padding-bottom:4px}
-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:0.82rem}
-thead th{background:#E8670A;color:white;padding:7px 9px;text-align:left;font-size:0.7rem;text-transform:uppercase;font-weight:800}
-tbody td{padding:6px 9px;border-bottom:1px solid #f5e0c5;vertical-align:middle}
+.factura-title h1{font-size:1.6rem;font-weight:900;color:#E8670A;margin-bottom:8px;letter-spacing:-0.5px}
+.factura-num{font-size:1rem;font-weight:900;color:#3d1a00;background:#fff8f0;border:2px solid #E8670A;border-radius:8px;padding:5px 16px;display:inline-block;margin-bottom:6px}
+.factura-fecha{font-size:0.8rem;color:#888;margin-top:4px}
+.datos-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:20px}
+.box{background:#fff8f0;border:1.5px solid #f5e8d8;border-radius:10px;padding:14px 16px}
+.box-title{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#E8670A;font-weight:900;display:block;margin-bottom:8px;border-bottom:1px solid #f5e8d8;padding-bottom:6px}
+.box p{font-size:0.82rem;color:#333;margin-bottom:2px}
+.box strong{color:#1a1a1a;font-size:0.88rem}
+table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:0.84rem}
+thead th{background:#E8670A;color:white;padding:9px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;font-weight:800;letter-spacing:0.05em}
+thead th:last-child{text-align:right}
+tbody td{padding:9px 12px;border-bottom:1px solid #f0e0d0;vertical-align:middle;color:#2a2a2a}
+tbody td:last-child{text-align:right;font-weight:700}
+tbody tr:last-child td{border-bottom:none}
 tbody tr:nth-child(even){background:#fffaf6}
-.total-box{display:flex;justify-content:flex-end;margin-bottom:14px}
-.total-inner{background:#E8670A;color:white;font-size:1.4rem;font-weight:900;padding:12px 20px;border-radius:10px;display:flex;gap:16px;align-items:center}
-.total-inner span:first-child{font-size:0.75rem;opacity:0.85;font-weight:700}
-.pago{display:flex;gap:18px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px 14px;font-size:0.78rem;margin-bottom:12px;flex-wrap:wrap}
-.pago-lbl{font-size:0.62rem;color:#aaa;text-transform:uppercase;font-weight:800;display:block;margin-bottom:2px}
-.pago-val{font-weight:800;color:#1a1a1a}
-@media print{body{padding:24px 32px}}
+.total-box{display:flex;justify-content:flex-end;margin-bottom:16px}
+.total-inner{background:#E8670A;color:white;font-size:1.45rem;font-weight:900;padding:14px 24px;border-radius:10px;display:flex;gap:16px;align-items:center}
+.total-inner span:first-child{font-size:0.78rem;opacity:0.9;font-weight:700}
+.pago{display:flex;gap:24px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px 16px;font-size:0.82rem;margin-bottom:16px;flex-wrap:wrap}
+.pago-lbl{font-size:0.65rem;color:#999;text-transform:uppercase;font-weight:800;display:block;margin-bottom:3px;letter-spacing:0.05em}
+.pago-val{font-weight:800;color:#1a1a1a;font-size:0.88rem}
+.footer{text-align:center;font-size:0.72rem;color:#bbb;border-top:1px solid #f0e0d0;padding-top:14px;margin-top:20px}
+@media print{body{padding:32px 40px}}
 </style></head><body>
 
 <div class="header">
