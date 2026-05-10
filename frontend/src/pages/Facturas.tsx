@@ -163,7 +163,7 @@ tbody tr:nth-child(even){background:#fffaf6}
   </div>
 </div>
 
-<script>window.onload=()=>window.print()</script>
+
 </body></html>`
 }
 
@@ -433,15 +433,18 @@ export default function Facturas() {
       const html = buildHTML(f, lineas || [])
 
       // Extraer solo el CSS y el body del HTML
-      // Renderizar HTML completo en iframe usando blob URL
-      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const htmlSinPrint = html.replace(/window\.print\s*\(\)/g, '').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      const blob = new Blob([htmlSinPrint], { type: 'text/html;charset=utf-8' })
       const blobUrl = URL.createObjectURL(blob)
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1200px;border:none'
-      iframe.src = blobUrl
       document.body.appendChild(iframe)
-      await new Promise<void>(resolve => { iframe.onload = () => resolve() })
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise<void>(resolve => {
+        iframe.onload = () => resolve()
+        iframe.src = blobUrl
+      })
+      if (iframe.contentWindow) (iframe.contentWindow as any).print = () => {}
+      await new Promise(r => setTimeout(r, 1200))
 
       const canvas = await h2c(iframe.contentDocument!.body, {
         scale: 2, useCORS: true, allowTaint: true,
@@ -509,15 +512,20 @@ export default function Facturas() {
       const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
 
-      // Renderizar HTML completo en iframe usando blob URL
-      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      // Renderizar con iframe bloqueando window.print
+      const htmlSinPrint = html.replace(/window\.print\s*\(\)/g, '').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      const blob = new Blob([htmlSinPrint], { type: 'text/html;charset=utf-8' })
       const blobUrl = URL.createObjectURL(blob)
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1200px;border:none'
-      iframe.src = blobUrl
       document.body.appendChild(iframe)
-      await new Promise<void>(resolve => { iframe.onload = () => resolve() })
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise<void>(resolve => {
+        iframe.onload = () => resolve()
+        iframe.src = blobUrl
+      })
+      // Bloquear print en el iframe
+      if (iframe.contentWindow) (iframe.contentWindow as any).print = () => {}
+      await new Promise(r => setTimeout(r, 1200))
 
       const canvas = await h2c(iframe.contentDocument!.body, {
         scale: 2, useCORS: true, allowTaint: true,
