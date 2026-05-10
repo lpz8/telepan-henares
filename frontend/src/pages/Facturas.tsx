@@ -498,13 +498,14 @@ export default function Facturas() {
       : f.tipo_pago === 'Bizum' ? '📱 Bizum al 622334126'
       : '💵 Efectivo al repartidor'
     const mensaje =
-      `Hola ${f.clientes?.nombre} 👋\n\n` +
-      `📄 *FACTURA ${f.numero}*\n` +
-      `📅 Periodo: ${mesLabel} ${anio}\n\n` +
-      `*Detalle:*\n${lineasTxt}\n\n` +
-      `💰 *TOTAL: ${Number(f.total).toFixed(2)} €*\n` +
-      `*Pago:* ${formaPago}\n\n` +
-      `Gracias 🍞 TelePan Henares · 633 958 532`
+      `Buenas tardes soy el Sergio el repartidor de pan, espero que estén muy bien ☺️, como cada mes les envío la factura esta vez del mes de *${mesLabel.toUpperCase()}* disculparme por enviarlo tan tarde tuve una incidencia con los mensajes del WhatsApp 😓🙏\n\n` +
+      `📄 *FACTURA ${f.numero}* — ${mesLabel} ${anio}\n` +
+      `💰 *TOTAL: ${Number(f.total).toFixed(2)} €* · ${formaPago}\n\n` +
+      `Por favor si hay alguna incidencia o cualquier cosa que no esté bien o consideren que esté incorrecta antes de nada indíqueme para solucionarlo.\n\n` +
+      `*POR FAVOR MUY IMPORTANTE:* cuando hagan el pago envíenme el justificante del mismo con el nombre de la calle la cual se realiza para llevar correctamente la contabilidad de los pagos 🙏\n\n` +
+      `Mil gracias por todo 🤗🤗😘\n\n` +
+      `SI POR CUALQUIER CIRCUNSTANCIA HAY ALGUNA FACTURA QUE NO SE VE BIEN O NO HAN PODIDO ABONAR INDÍQUENME PARA PODER SOLUCIONAR LO ANTES POSIBLE POR FAVOR MIL GRACIAS DE NUEVO\n\n` +
+      `TelePan Henares · 633 958 532 🍞`
 
     const SERVER_URL = (import.meta as any).env?.VITE_WA_SERVER_URL || ''
     const API_KEY = (import.meta as any).env?.VITE_WA_API_KEY || ''
