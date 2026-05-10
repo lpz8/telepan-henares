@@ -461,7 +461,16 @@ export default function Facturas() {
         }
       }
 
-      pdf.save(nombreArchivo)
+      // Descargar directamente sin diálogo de impresión
+      const pdfBlob = pdf.output('blob')
+      const pdfUrl = URL.createObjectURL(pdfBlob)
+      const a = document.createElement('a')
+      a.href = pdfUrl
+      a.download = nombreArchivo
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(pdfUrl)
       globalToast(`✅ ${nombreArchivo} descargado`)
     } catch (err: any) {
       globalToast('Error PDF: ' + err.message, 'error')
@@ -717,10 +726,6 @@ export default function Facturas() {
                 {/* Descargar PDF */}
                 <button style={{background:'#7c3aed',color:'white',border:'none',borderRadius:8,padding:'5px 10px',fontSize:'0.72rem',fontWeight:800,cursor:'pointer'}}
                   onClick={()=>descargarPDF(f)} title="Descargar PDF en el PC">⬇️ PDF</button>
-                {/* Imprimir */}
-                <button className="btn btn-secondary btn-sm" onClick={()=>printOne(f)} title="Imprimir factura">
-                  <Printer size={13}/>
-                </button>
                 {/* WhatsApp — solo el verde */}
                 <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 10px',fontSize:'0.72rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'jpg')}
