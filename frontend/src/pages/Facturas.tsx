@@ -657,20 +657,20 @@ export default function Facturas() {
               </div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>openEdit(f)} title="Editar"><Edit2 size={13}/></button>
-                {/* Descargar JPG al PC */}
-                <button style={{background:'#f59e0b',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:'pointer'}}
-                  onClick={()=>descargarJPG(f)} title="Descargar JPG">⬇️JPG</button>
-                {/* Descargar PDF al PC */}
-                <button style={{background:'#7c3aed',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:'pointer'}}
-                  onClick={()=>descargarPDF(f)} title="Descargar PDF">⬇️PDF</button>
-                {/* Enviar JPG por WA */}
-                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
+                {/* Descargar JPG */}
+                <button style={{background:'#f59e0b',color:'white',border:'none',borderRadius:8,padding:'5px 10px',fontSize:'0.72rem',fontWeight:800,cursor:'pointer'}}
+                  onClick={()=>descargarJPG(f)} title="Descargar JPG en el PC">⬇️ JPG</button>
+                {/* Descargar PDF */}
+                <button style={{background:'#7c3aed',color:'white',border:'none',borderRadius:8,padding:'5px 10px',fontSize:'0.72rem',fontWeight:800,cursor:'pointer'}}
+                  onClick={()=>descargarPDF(f)} title="Descargar PDF en el PC">⬇️ PDF</button>
+                {/* Imprimir */}
+                <button className="btn btn-secondary btn-sm" onClick={()=>printOne(f)} title="Imprimir factura">
+                  <Printer size={13}/>
+                </button>
+                {/* WhatsApp — solo el verde */}
+                <button style={{background:f.clientes?.telefono1?'#25D366':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 10px',fontSize:'0.72rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
                   onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'jpg')}
-                  title="Enviar JPG por WhatsApp">📸WA</button>
-                {/* Enviar PDF por WA */}
-                <button style={{background:f.clientes?.telefono1?'#2563eb':'#ccc',color:'white',border:'none',borderRadius:8,padding:'5px 8px',fontSize:'0.7rem',fontWeight:800,cursor:f.clientes?.telefono1?'pointer':'not-allowed'}}
-                  onClick={()=>f.clientes?.telefono1&&whatsappFactura(f,'pdf')}
-                  title="Enviar PDF por WhatsApp">📄WA</button>
+                  title="Enviar por WhatsApp">📱 WA</button>
                 <button className="btn btn-danger btn-sm btn-icon" onClick={()=>deleteFactura(f.id)}><Trash2 size={13}/></button>
               </div>
             </div>
