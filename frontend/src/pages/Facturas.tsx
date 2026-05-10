@@ -62,7 +62,7 @@ function buildHTML(factura: any, lineas: any[]) {
 html,body{width:800px;background:white}
 body{font-family:'Helvetica Neue',Arial,sans-serif;padding:48px 56px 48px 56px;color:#1a1a1a;font-size:13px;line-height:1.5}
 .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E8670A;padding-bottom:20px;margin-bottom:24px}
-.logo{width:80px;height:56px;object-fit:contain}
+.logo{width:110px;height:75px;object-fit:contain}
 .emisor{font-size:0.8rem;color:#555;margin-top:8px;line-height:1.8}
 .emisor strong{color:#3d1a00;font-size:0.85rem}
 .factura-title{text-align:right}
