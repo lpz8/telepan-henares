@@ -421,28 +421,36 @@ export default function Facturas() {
     const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}.pdf`
     globalToast('⏳ Generando PDF...')
     try {
-      // Primero generar el JPG con html2canvas
       const h2c = await loadH2C()
       const JsPDF = await loadJsPDF()
       const html = buildHTML(f, lineas || [])
 
-      // Renderizar en iframe
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1130px;border:none;visibility:hidden'
-      document.body.appendChild(iframe)
-      iframe.contentDocument!.open()
-      iframe.contentDocument!.write(html)
-      iframe.contentDocument!.close()
-      await new Promise(r => setTimeout(r, 2000))
+      // Extraer solo el CSS y el body del HTML
+      const cssMatch = html.match(/<style>([\s\S]*?)<\/style>/i)
+      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+      const css = cssMatch ? cssMatch[1] : ''
+      const body = bodyMatch ? bodyMatch[1] : ''
 
-      const canvas = await h2c(iframe.contentDocument!.body, {
+      // Crear div oculto con el CSS inline
+      const div = document.createElement('div')
+      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white;z-index:-1;font-family:Arial,sans-serif'
+      const styleEl = document.createElement('style')
+      styleEl.textContent = css
+      div.appendChild(styleEl)
+      const contentDiv = document.createElement('div')
+      contentDiv.innerHTML = body
+      div.appendChild(contentDiv)
+      document.body.appendChild(div)
+      await new Promise(r => setTimeout(r, 1800))
+
+      const canvas = await h2c(div, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#ffffff', logging: false,
         width: 800, windowWidth: 800
       })
-      document.body.removeChild(iframe)
+      document.body.removeChild(div)
 
-      // Crear PDF A4 con la imagen
+      // Generar PDF A4 con la imagen — sin abrir nada
       const imgData = canvas.toDataURL('image/jpeg', 0.97)
       const pdf = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       const pdfW = pdf.internal.pageSize.getWidth()
@@ -452,7 +460,6 @@ export default function Facturas() {
       if (imgH <= pdfH) {
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, imgH)
       } else {
-        // Si es más alto que una página, dividir en páginas
         let yPos = 0
         while (yPos < imgH) {
           if (yPos > 0) pdf.addPage()
@@ -461,7 +468,7 @@ export default function Facturas() {
         }
       }
 
-      // Descargar directamente sin diálogo de impresión
+      // Descargar directamente sin diálogo
       const pdfBlob = pdf.output('blob')
       const pdfUrl = URL.createObjectURL(pdfBlob)
       const a = document.createElement('a')
@@ -501,29 +508,28 @@ export default function Facturas() {
       const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
 
-      // Usar iframe para renderizar el HTML completo con todos los estilos
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1130px;border:none;visibility:hidden'
-      document.body.appendChild(iframe)
-      iframe.contentDocument!.open()
-      iframe.contentDocument!.write(html)
-      iframe.contentDocument!.close()
+      const cssMatch = html.match(/<style>([\s\S]*?)<\/style>/i)
+      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+      const css = cssMatch ? cssMatch[1] : ''
+      const body = bodyMatch ? bodyMatch[1] : ''
 
-      // Esperar a que cargue completamente incluyendo estilos e imágenes
-      await new Promise(r => setTimeout(r, 2000))
+      const div = document.createElement('div')
+      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:white;z-index:-1;font-family:Arial,sans-serif'
+      const styleEl = document.createElement('style')
+      styleEl.textContent = css
+      div.appendChild(styleEl)
+      const contentDiv = document.createElement('div')
+      contentDiv.innerHTML = body
+      div.appendChild(contentDiv)
+      document.body.appendChild(div)
+      await new Promise(r => setTimeout(r, 1800))
 
-      const canvas = await h2c(iframe.contentDocument!.body, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 800,
-        windowWidth: 800,
-        scrollX: 0,
-        scrollY: 0
+      const canvas = await h2c(div, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', logging: false,
+        width: 800, windowWidth: 800
       })
-      document.body.removeChild(iframe)
+      document.body.removeChild(div)
 
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/jpeg', 0.97)
