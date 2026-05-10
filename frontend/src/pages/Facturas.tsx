@@ -432,7 +432,7 @@ export default function Facturas() {
   // Generar JPG de una factura y descargarlo
   const descargarJPG = async (f: any) => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
-    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '').trim()
+    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, '').trim()
     const mesLabel = MESES[parseInt(f.mes?.split('-')[1] || '1') - 1]
     const anio = f.mes?.split('-')[0]
     const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}.jpg`
@@ -440,19 +440,37 @@ export default function Facturas() {
     try {
       const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
-      const div = document.createElement('div')
-      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;padding:0;margin:0'
-      div.innerHTML = html.replace(/<html[^>]*>|<\/html>|<head>[\s\S]*?<\/head>|<body[^>]*>|<\/body>/gi, '')
-      document.body.appendChild(div)
-      await new Promise(r => setTimeout(r, 1200))
-      const canvas = await h2c(div, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: 794 })
-      document.body.removeChild(div)
+
+      // Usar iframe para renderizar el HTML completo con todos los estilos
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:1130px;border:none;visibility:hidden'
+      document.body.appendChild(iframe)
+      iframe.contentDocument!.open()
+      iframe.contentDocument!.write(html)
+      iframe.contentDocument!.close()
+
+      // Esperar a que cargue completamente incluyendo estilos e imágenes
+      await new Promise(r => setTimeout(r, 2000))
+
+      const canvas = await h2c(iframe.contentDocument!.body, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: 800,
+        windowWidth: 800,
+        scrollX: 0,
+        scrollY: 0
+      })
+      document.body.removeChild(iframe)
+
       const a = document.createElement('a')
-      a.href = canvas.toDataURL('image/jpeg', 0.95)
+      a.href = canvas.toDataURL('image/jpeg', 0.97)
       a.download = nombreArchivo
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       globalToast(`✅ ${nombreArchivo} descargado`)
-      return canvas.toDataURL('image/jpeg', 0.95)
+      return canvas.toDataURL('image/jpeg', 0.97)
     } catch (err: any) {
       globalToast('Error JPG: ' + err.message, 'error')
       return null
