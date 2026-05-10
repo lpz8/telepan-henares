@@ -401,59 +401,85 @@ export default function Facturas() {
   // Descargar factura como PDF
   const descargarPDF = async (f: any) => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
+    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '').trim()
+    const mesLabel = MESES[parseInt(f.mes?.split('-')[1] || '1') - 1]
+    const anio = f.mes?.split('-')[0]
+    const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}`
     const html = buildHTML(f, lineas || [])
     const w = window.open('', '_blank')
     if (!w) { globalToast('Permite las ventanas emergentes en el navegador', 'error'); return }
-    w.document.write(html)
+    // Añadir título al documento para que el PDF tenga el nombre correcto
+    w.document.write(html.replace('<title>', `<title>${nombreArchivo} — `))
     w.document.close()
     setTimeout(() => {
       w.print()
-      globalToast('✅ PDF listo — en el diálogo: "Guardar como PDF" → adjúntalo en WhatsApp 📎')
+      globalToast(`✅ Guarda como: ${nombreArchivo}.pdf`)
     }, 800)
   }
 
-  // Descargar factura como JPG usando html2canvas
+  // Cargar html2canvas una sola vez
+  const loadH2C = async () => {
+    if ((window as any).html2canvas) return (window as any).html2canvas
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+      s.onload = () => resolve(); s.onerror = () => reject(new Error('Error cargando html2canvas'))
+      document.head.appendChild(s)
+    })
+    return (window as any).html2canvas
+  }
+
+  // Generar JPG de una factura y descargarlo
   const descargarJPG = async (f: any) => {
     const { data: lineas } = await supabase.from('lineas_factura').select('*').eq('factura_id', f.id)
-    globalToast('⏳ Generando imagen JPG...')
+    const nombreCliente = (f.clientes?.nombre || 'Cliente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '').trim()
+    const mesLabel = MESES[parseInt(f.mes?.split('-')[1] || '1') - 1]
+    const anio = f.mes?.split('-')[0]
+    const nombreArchivo = `Factura_${nombreCliente}_${mesLabel}_${anio}.jpg`
+    globalToast('⏳ Generando JPG...')
     try {
-      // Cargar html2canvas si no está cargado
-      if (!(window as any).html2canvas) {
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
-          s.onload = () => resolve()
-          s.onerror = () => reject(new Error('No se pudo cargar html2canvas'))
-          document.head.appendChild(s)
-        })
-      }
-      const h2c = (window as any).html2canvas
+      const h2c = await loadH2C()
       const html = buildHTML(f, lineas || [])
-      // Crear un iframe oculto para renderizar la factura
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:none;z-index:-1'
-      document.body.appendChild(iframe)
-      iframe.contentDocument!.open()
-      iframe.contentDocument!.write(html)
-      iframe.contentDocument!.close()
-      await new Promise(r => setTimeout(r, 1500))
-      const canvas = await h2c(iframe.contentDocument!.body, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#ffffff', logging: false,
-        width: 794, windowWidth: 794
-      })
-      document.body.removeChild(iframe)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+      const div = document.createElement('div')
+      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;padding:0;margin:0'
+      div.innerHTML = html.replace(/<html[^>]*>|<\/html>|<head>[\s\S]*?<\/head>|<body[^>]*>|<\/body>/gi, '')
+      document.body.appendChild(div)
+      await new Promise(r => setTimeout(r, 1200))
+      const canvas = await h2c(div, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: 794 })
+      document.body.removeChild(div)
       const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = `Factura_${f.numero}.jpg`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      globalToast('✅ JPG descargado — adjúntalo en WhatsApp con el clip 📎')
+      a.href = canvas.toDataURL('image/jpeg', 0.95)
+      a.download = nombreArchivo
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      globalToast(`✅ ${nombreArchivo} descargado`)
+      return canvas.toDataURL('image/jpeg', 0.95)
     } catch (err: any) {
-      globalToast('Error generando JPG: ' + err.message, 'error')
+      globalToast('Error JPG: ' + err.message, 'error')
+      return null
     }
+  }
+
+  // Descargar TODAS las facturas como JPG de una vez
+  const descargarTodosJPG = async (list: any[]) => {
+    if (!confirm(`¿Descargar ${list.length} facturas como JPG?`)) return
+    globalToast(`⏳ Generando ${list.length} JPGs...`)
+    let ok = 0
+    for (const f of list) {
+      const result = await descargarJPG(f)
+      if (result) ok++
+      await new Promise(r => setTimeout(r, 800))
+    }
+    globalToast(`✅ ${ok} facturas JPG descargadas`)
+  }
+
+  // Descargar TODAS las facturas como PDF de una vez
+  const descargarTodosPDF = async (list: any[]) => {
+    if (!confirm(`¿Descargar ${list.length} facturas como PDF?`)) return
+    for (const f of list) {
+      await descargarPDF(f)
+      await new Promise(r => setTimeout(r, 1500))
+    }
+    globalToast(`✅ ${list.length} facturas PDF abiertas para guardar`)
   }
 
   const whatsappFactura = async (f: any, formato: 'jpg' | 'pdf' = 'jpg') => {
@@ -582,11 +608,19 @@ export default function Facturas() {
             <span style={{color:'#16a34a'}}>{totalFiltered.toFixed(2)} €</span>
           </span>
           <button className="btn btn-secondary btn-sm" onClick={()=>printGroup(filtered)}>
-            <Printer size={14}/> Imprimir grupo completo
+            <Printer size={14}/> Imprimir todos
+          </button>
+          <button className="btn btn-sm" onClick={()=>descargarTodosJPG(filtered)}
+            style={{ background: '#f59e0b', border: 'none', color: 'white', borderRadius: 8, padding: '6px 12px', fontWeight: 800, cursor: 'pointer' }}>
+            ⬇️ Todos JPG
+          </button>
+          <button className="btn btn-sm" onClick={()=>descargarTodosPDF(filtered)}
+            style={{ background: '#7c3aed', border: 'none', color: 'white', borderRadius: 8, padding: '6px 12px', fontWeight: 800, cursor: 'pointer' }}>
+            ⬇️ Todos PDF
           </button>
           <button className="btn btn-sm" onClick={()=>whatsappTodos(filtered)}
             style={{ background: '#25D366', border: 'none', color: 'white', borderRadius: 8, padding: '6px 12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-            📱 WhatsApp a todos ({filtered.length})
+            📱 WA a todos ({filtered.length})
           </button>
         </div>
       )}
