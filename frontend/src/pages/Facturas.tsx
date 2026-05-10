@@ -21,16 +21,16 @@ const EMISOR = {
 
 const GRUPOS_PAGO = [
   { key: 'TOTAL',          label: '📊 Total General',    color: '#E8670A' },
-  { key: 'Efectivo',       label: '💵 Efectivo',          color: '#16a34a' },
-  { key: 'Bizum',          label: '📱 Bizum',             color: '#7c3aed' },
-  { key: 'Transferencia',  label: '🏦 Transferencia',     color: '#2563eb' },
-  { key: 'Domiciliación',  label: '🔄 Domiciliación',     color: '#ca8a04' },
-  { key: 'NoEfectivo',     label: '🏦 No Efectivo (Bizum+Transfer.+Domicil.)', color: '#0891b2' },
+  { key: 'Efectivo',          label: '💵 Efectivo',           color: '#16a34a' },
+  { key: 'Bizum',             label: '📱 Bizum',              color: '#7c3aed' },
+  { key: 'Transferencia',     label: '🏦 Transferencia',      color: '#2563eb' },
+  { key: 'Domiciliación',     label: '🔄 Domiciliación',      color: '#ca8a04' },
+  { key: 'NoDomiciliacion',   label: '✅ No Domiciliado',     color: '#0891b2' },
 ]
 
 function getFilteredFacturas(facturas: any[], key: string) {
   if (key === 'TOTAL') return facturas
-  if (key === 'NoEfectivo') return facturas.filter(f => (f.tipo_pago || '') !== 'Efectivo')
+  if (key === 'NoDomiciliacion') return facturas.filter(f => (f.tipo_pago || '') !== 'Domiciliación')
   return facturas.filter(f => (f.tipo_pago || '') === key)
 }
 
