@@ -59,9 +59,9 @@ function buildHTML(factura: any, lineas: any[]) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Nunito',Arial,sans-serif;padding:28px 32px;max-width:820px;margin:0 auto;color:#1a1a1a;font-size:12.5px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #E8670A;padding-bottom:14px;margin-bottom:16px}
-.logo{width:170px;object-fit:contain}
+body{font-family:'Nunito',Arial,sans-serif;padding:36px 48px;max-width:800px;margin:0 auto;color:#1a1a1a;font-size:12.5px;background:white}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E8670A;padding-bottom:16px;margin-bottom:22px}
+.logo{width:80px;height:55px;object-fit:contain}
 .emisor{font-size:0.78rem;color:#555;margin-top:6px;line-height:1.7}
 .emisor strong{color:#5a2d0c}
 .factura-title{text-align:right}
@@ -81,7 +81,7 @@ tbody tr:nth-child(even){background:#fffaf6}
 .pago{display:flex;gap:18px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px 14px;font-size:0.78rem;margin-bottom:12px;flex-wrap:wrap}
 .pago-lbl{font-size:0.62rem;color:#aaa;text-transform:uppercase;font-weight:800;display:block;margin-bottom:2px}
 .pago-val{font-weight:800;color:#1a1a1a}
-@media print{body{padding:16px 20px}}
+@media print{body{padding:24px 32px}}
 </style></head><body>
 
 <div class="header">
