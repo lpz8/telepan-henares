@@ -82,21 +82,67 @@ export default function Configuracion() {
   const eliminarDia = (fecha: string) => setDiasNoReparto(prev => prev.filter(d => d.fecha !== fecha))
 
   const exportBackup = async () => {
-    const [c, p, pm, g, pr, cfg] = await Promise.all([
-      supabase.from('clientes').select('*'),
-      supabase.from('productos').select('*'),
+    const [c, p, pm, g, pr, cfg, f] = await Promise.all([
+      supabase.from('clientes').select('*').order('orden_ruta'),
+      supabase.from('productos').select('*').order('nombre'),
       supabase.from('pedidos_modelo').select('*'),
-      supabase.from('gastos').select('*'),
-      supabase.from('proveedores').select('*'),
+      supabase.from('gastos').select('*').order('fecha'),
+      supabase.from('proveedores').select('*').order('nombre'),
       supabase.from('configuracion').select('*'),
+      supabase.from('facturas').select('*').order('fecha'),
     ])
-    const backup = { fecha: new Date().toISOString(), clientes: c.data, productos: p.data, pedidos_modelo: pm.data, gastos: g.data, proveedores: pr.data, configuracion: cfg.data }
+    const backup = { fecha: new Date().toISOString(), clientes: c.data, productos: p.data, pedidos_modelo: pm.data, gastos: g.data, proveedores: pr.data, configuracion: cfg.data, facturas: f.data }
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `backup-telepan-${new Date().toISOString().split('T')[0]}.json`
     a.click()
-    globalToast('Backup descargado ✓')
+    globalToast('✅ Backup JSON descargado')
+  }
+
+  const exportExcel = async () => {
+    globalToast('⏳ Generando Excel...')
+    try {
+      if (!(window as any).XLSX) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+          s.onload = () => resolve(); s.onerror = () => reject()
+          document.head.appendChild(s)
+        })
+      }
+      const XLSX = (window as any).XLSX
+      const [clientes, facturas, pendientes, productos, gastos] = await Promise.all([
+        supabase.from('clientes').select('codigo, nombre, direccion, poblacion, telefono1, forma_pago, orden_ruta').order('orden_ruta'),
+        supabase.from('facturas').select('numero, mes, fecha, tipo_pago, base, iva_total, total, pagado, fecha_pago, clientes(nombre)').order('numero'),
+        supabase.from('facturas').select('numero, mes, total, clientes(nombre)').eq('pagado', false).order('mes'),
+        supabase.from('productos').select('nombre, precio_sin_iva, iva, categoria').order('nombre'),
+        supabase.from('gastos').select('fecha, categoria, descripcion, importe').order('fecha'),
+      ])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((clientes.data||[]).map((c:any) => ({
+        'Cód.': c.codigo,'Nombre': c.nombre,'Dirección': c.direccion,
+        'Zona': c.poblacion,'Teléfono': c.telefono1,'Forma Pago': c.forma_pago,'Orden Ruta': c.orden_ruta
+      }))), 'Clientes')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((facturas.data||[]).map((f:any) => ({
+        'Número': f.numero,'Cliente': f.clientes?.nombre,'Mes': f.mes,'Fecha': f.fecha,
+        'Forma Pago': f.tipo_pago,'Base': Number(f.base).toFixed(2),'IVA': Number(f.iva_total).toFixed(2),
+        'Total': Number(f.total).toFixed(2),'Cobrada': f.pagado?'Sí':'No','Fecha Cobro': f.fecha_pago||''
+      }))), 'Facturas')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((pendientes.data||[]).map((f:any) => ({
+        'Cliente': f.clientes?.nombre,'Factura': f.numero,'Mes': f.mes,'Pendiente': Number(f.total).toFixed(2)+'€'
+      }))), 'Pendientes Cobro')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((productos.data||[]).map((p:any) => ({
+        'Nombre': p.nombre,'Precio sin IVA': Number(p.precio_sin_iva).toFixed(2),'IVA %': p.iva,'Categoría': p.categoria
+      }))), 'Productos')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((gastos.data||[]).map((g:any) => ({
+        'Fecha': g.fecha,'Categoría': g.categoria,'Descripción': g.descripcion,'Importe': Number(g.importe).toFixed(2)
+      }))), 'Gastos')
+      XLSX.writeFile(wb, `TelePan_Backup_${new Date().toISOString().split('T')[0]}.xlsx`)
+      globalToast('✅ Excel descargado con todos los datos')
+    } catch (err: any) {
+      globalToast('Error: ' + err.message, 'error')
+    }
   }
 
   const hoy = new Date().toISOString().split('T')[0]
@@ -109,6 +155,9 @@ export default function Configuracion() {
         <h1 className="page-title">⚙️ Configuración</h1>
         <button className="btn btn-secondary" onClick={exportBackup}>
           <Download size={16} /> Backup JSON
+        </button>
+        <button className="btn btn-success" onClick={exportExcel}>
+          <Download size={16} /> Exportar Excel
         </button>
       </div>
 
