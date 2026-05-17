@@ -10,6 +10,7 @@ const MESES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct'
 export default function Estadisticas() {
   const [loading, setLoading] = useState(true)
   const [anio] = useState(new Date().getFullYear())
+  const [mesPDF, setMesPDF] = useState(String(new Date().getMonth()))
   const [kpis, setKpis] = useState({ ventas: 0, cobrado: 0, pendiente: 0, gastos: 0, beneficio: 0, clientes: 0, productos: 0, facturas: 0 })
   const [ventasMes, setVentasMes] = useState<any[]>([])
   const [topClientes, setTopClientes] = useState<any[]>([])
@@ -29,17 +30,31 @@ export default function Estadisticas() {
       setLoading(true)
       const fechaInicio = `${anio}-01-01`
 
-      const [pedidos, facturas, gastos, clientes, productos] = await Promise.all([
-        supabase.from('pedidos').select('cliente_id, producto_id, cantidad, precio, iva, clientes(nombre), productos(nombre)').gte('fecha', fechaInicio),
-        supabase.from('facturas').select('total, mes, tipo_pago, pagado, iva_total, base').gte('fecha', fechaInicio),
+      // Cargar pedidos con paginación para no perder ninguno
+      let allPedidosRaw: any[] = []
+      let page = 0
+      while (true) {
+        const { data: chunk } = await supabase.from('pedidos')
+          .select('cliente_id, producto_id, cantidad, precio, iva, fecha, clientes(nombre), productos(nombre)')
+          .gte('fecha', fechaInicio)
+          .range(page * 1000, (page + 1) * 1000 - 1)
+        if (!chunk || chunk.length === 0) break
+        allPedidosRaw = allPedidosRaw.concat(chunk)
+        if (chunk.length < 1000) break
+        page++
+      }
+
+      const [facturas, gastos, clientes, productos] = await Promise.all([
+        supabase.from('facturas').select('total, mes, tipo_pago, pagado, iva_total, base, cliente_id, fecha').gte('fecha', fechaInicio),
         supabase.from('gastos').select('importe, categoria, fecha').gte('fecha', fechaInicio),
         supabase.from('clientes').select('id', { count: 'exact', head: true }),
         supabase.from('productos').select('id', { count: 'exact', head: true }),
       ])
+      const pedidos = { data: allPedidosRaw }
 
       const allFacturas = facturas.data || []
       const allGastos = gastos.data || []
-      const allPedidos = pedidos.data || []
+      const allPedidos = allPedidosRaw
 
       const totalVentas = allFacturas.reduce((s, f) => s + Number(f.total), 0)
       const totalCobrado = allFacturas.filter(f => f.pagado).reduce((s, f) => s + Number(f.total), 0)
@@ -149,11 +164,127 @@ export default function Estadisticas() {
     { id: 'gastos_detalle', label: '✏️ Editar Gastos' },
   ]
 
+  const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+  const generarInformePDF = async () => {
+    const mesNum = String(parseInt(mesPDF) + 1).padStart(2,'0')
+    const mesLabel = MESES_NOMBRES[parseInt(mesPDF)]
+    const mesKey = `${anio}-${mesNum}`
+
+    // Cargar datos del mes
+    const [factsMes, pedMes, gastosMes, deudoresMes] = await Promise.all([
+      supabase.from('facturas').select('*, clientes(nombre, forma_pago)').eq('mes', mesKey),
+      supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-31`),
+      supabase.from('gastos').select('descripcion, categoria, importe, fecha').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-31`),
+      supabase.from('facturas').select('total, clientes(nombre)').eq('mes', mesKey).eq('pagado', false),
+    ])
+
+    const facts = factsMes.data || []
+    const peds = pedMes.data || []
+    const gasts = gastosMes.data || []
+    const deud = deudoresMes.data || []
+
+    const totalFact = facts.reduce((s,f) => s+Number(f.total),0)
+    const totalCobrado = facts.filter(f=>f.pagado).reduce((s,f)=>s+Number(f.total),0)
+    const totalPend = facts.filter(f=>!f.pagado).reduce((s,f)=>s+Number(f.total),0)
+    const totalGastos = gasts.reduce((s,g)=>s+Number(g.importe),0)
+    const beneficio = totalCobrado - totalGastos
+    const totalUnidades = peds.reduce((s,p)=>s+Number(p.cantidad),0)
+
+    // Top productos del mes
+    const prodMap: Record<string,number> = {}
+    peds.forEach((p:any) => { const n=p.productos?.nombre||'?'; prodMap[n]=(prodMap[n]||0)+Number(p.cantidad) })
+    const topProds = Object.entries(prodMap).sort(([,a],[,b])=>b-a).slice(0,5)
+
+    // Deudores del mes
+    const deudMap: Record<string,number> = {}
+    deud.forEach((f:any)=>{ const n=f.clientes?.nombre||'?'; deudMap[n]=(deudMap[n]||0)+Number(f.total) })
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Informe ${mesLabel} ${anio}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Arial,sans-serif;padding:40px 48px;color:#1a1a1a;font-size:13px}
+      h1{font-size:1.8rem;color:#E8670A;margin-bottom:4px}
+      .sub{color:#888;font-size:0.85rem;margin-bottom:28px}
+      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+      .kpi{background:#fff8f0;border:2px solid #f5e8d8;border-radius:10px;padding:14px;text-align:center}
+      .kpi-val{font-size:1.6rem;font-weight:900;color:#E8670A}
+      .kpi-lbl{font-size:0.7rem;color:#888;text-transform:uppercase;font-weight:700;margin-top:4px}
+      .kpi.verde .kpi-val{color:#16a34a}
+      .kpi.rojo .kpi-val{color:#dc2626}
+      .kpi.azul .kpi-val{color:#2563eb}
+      h2{font-size:1rem;font-weight:800;color:#5a2d0c;border-bottom:2px solid #E8670A;padding-bottom:6px;margin:20px 0 12px}
+      table{width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:8px}
+      th{background:#E8670A;color:white;padding:7px 10px;text-align:left;font-size:0.72rem;text-transform:uppercase}
+      td{padding:7px 10px;border-bottom:1px solid #f5e0c5}
+      tr:last-child td{border:none}
+      tr:nth-child(even){background:#fffaf6}
+      .footer{margin-top:32px;text-align:center;font-size:0.72rem;color:#aaa;border-top:1px solid #f5e0c5;padding-top:12px}
+      .badge-verde{background:#f0fdf4;color:#16a34a;border-radius:5px;padding:2px 8px;font-weight:800;font-size:0.72rem}
+      .badge-rojo{background:#fef2f2;color:#dc2626;border-radius:5px;padding:2px 8px;font-weight:800;font-size:0.72rem}
+    </style></head><body>
+    <h1>📊 Informe Mensual — ${mesLabel} ${anio}</h1>
+    <div class="sub">TelePan Henares · Generado el ${new Date().toLocaleDateString('es-ES')}</div>
+
+    <div class="grid">
+      <div class="kpi"><div class="kpi-val">${totalFact.toFixed(2)} €</div><div class="kpi-lbl">Facturado</div></div>
+      <div class="kpi verde"><div class="kpi-val">${totalCobrado.toFixed(2)} €</div><div class="kpi-lbl">Cobrado</div></div>
+      <div class="kpi rojo"><div class="kpi-val">${totalPend.toFixed(2)} €</div><div class="kpi-lbl">Pendiente</div></div>
+      <div class="kpi rojo"><div class="kpi-val">${totalGastos.toFixed(2)} €</div><div class="kpi-lbl">Gastos</div></div>
+      <div class="kpi ${beneficio>=0?'verde':'rojo'}"><div class="kpi-val">${beneficio.toFixed(2)} €</div><div class="kpi-lbl">Beneficio neto</div></div>
+      <div class="kpi azul"><div class="kpi-val">${totalUnidades}</div><div class="kpi-lbl">Unidades repartidas</div></div>
+    </div>
+
+    <h2>📄 Facturas del mes (${facts.length})</h2>
+    <table>
+      <tr><th>Nº Factura</th><th>Cliente</th><th>Forma pago</th><th>Total</th><th>Estado</th></tr>
+      ${facts.map(f=>`<tr><td>${f.numero}</td><td>${(f as any).clientes?.nombre||'—'}</td><td>${f.tipo_pago}</td><td><strong>${Number(f.total).toFixed(2)} €</strong></td><td><span class="${f.pagado?'badge-verde':'badge-rojo'}">${f.pagado?'✅ Cobrada':'⏳ Pendiente'}</span></td></tr>`).join('')}
+    </table>
+
+    ${topProds.length > 0 ? `
+    <h2>🍞 Top productos del mes</h2>
+    <table>
+      <tr><th>Producto</th><th>Unidades</th></tr>
+      ${topProds.map(([n,u])=>`<tr><td>${n}</td><td><strong>${u}</strong></td></tr>`).join('')}
+    </table>` : ''}
+
+    ${gasts.length > 0 ? `
+    <h2>💸 Gastos del mes</h2>
+    <table>
+      <tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Importe</th></tr>
+      ${gasts.map(g=>`<tr><td>${g.fecha}</td><td>${g.descripcion}</td><td>${g.categoria}</td><td><strong>${Number(g.importe).toFixed(2)} €</strong></td></tr>`).join('')}
+      <tr><td colspan="3"><strong>TOTAL GASTOS</strong></td><td><strong>${totalGastos.toFixed(2)} €</strong></td></tr>
+    </table>` : ''}
+
+    ${Object.keys(deudMap).length > 0 ? `
+    <h2>⚠️ Clientes con pago pendiente</h2>
+    <table>
+      <tr><th>Cliente</th><th>Importe pendiente</th></tr>
+      ${Object.entries(deudMap).map(([n,t])=>`<tr><td>${n}</td><td><strong style="color:#dc2626">${t.toFixed(2)} €</strong></td></tr>`).join('')}
+    </table>` : '<h2>✅ Todos los clientes han pagado</h2>'}
+
+    <div class="footer">TelePan Henares · Informe generado automáticamente · ${new Date().toLocaleString('es-ES')}</div>
+    </body></html>`
+
+    const w = window.open('','_blank')
+    if (!w) { alert('Permite las ventanas emergentes'); return }
+    w.document.write(html)
+    w.document.close()
+    setTimeout(() => w.print(), 800)
+  }
+
   return (
     <div>
       <div className="page-header">
         <h1 className="page-title">📊 Estadísticas {anio}</h1>
-        <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Exportar PDF</button>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <select className="select" style={{ width:'auto' }} value={mesPDF} onChange={e=>setMesPDF(e.target.value)}>
+            {MESES_NOMBRES.map((m,i)=><option key={i} value={String(i)}>{m}</option>)}
+          </select>
+          <button className="btn btn-primary" onClick={generarInformePDF}>📄 Informe mensual PDF</button>
+          <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Exportar PDF</button>
+        </div>
       </div>
 
       <div className="tabs">
