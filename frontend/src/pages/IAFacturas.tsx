@@ -28,6 +28,21 @@ Productos IVA 4%: CASA 1€, PISTOLA 0.88€, BASTÓN 1.20€, LEÑA 1.35€, CH
 IVA 21%: REVISTAS/PERIÓDICO 3-4€. Huevos IVA 4%: CAJA 76.93€, DOCENA 4.10€.
 beneficio = total_con_iva - suma importes de gastos_detectados.`
 
+
+const PROMPT_CATALOGO = `Eres un asistente para TELEPAN HENARES, panadería española.
+Analiza esta imagen de catálogo o lista de precios de proveedor.
+Extrae TODOS los productos con sus precios.
+Responde ÚNICAMENTE con JSON válido sin markdown ni texto extra:
+{"proveedor":"nombre del proveedor si aparece","fecha":"fecha si aparece","productos":[{"nombre":"nombre del artículo","precio_sin_iva":0.00,"iva":4,"unidad":"ud/kg/caja/docena","descripcion":"descripción adicional si hay"}],"observaciones":"notas relevantes"}
+IMPORTANTE:
+- precio_sin_iva: precio SIN IVA en euros (número decimal)
+- iva: porcentaje de IVA (4, 10 o 21)
+- Si el precio incluye IVA y el IVA es 4%, divide entre 1.04 para obtener precio sin IVA
+- Pan y productos de panadería: IVA 4%
+- Bollería: IVA 4%  
+- Huevos: IVA 4%
+- Extrae TODOS los productos que veas, no omitas ninguno`
+
 const KEY_NAME = 'groq_key_v1'
 
 export default function IAFacturas() {
@@ -48,6 +63,17 @@ export default function IAFacturas() {
   const [editando, setEditando] = useState(false)
   const [totalManual, setTotalManual] = useState('')
   const [conceptoManual, setConceptoManual] = useState('')
+  // Catálogo proveedor
+  const [tabIA, setTabIA] = useState<'facturas' | 'catalogo'>('facturas')
+  const [catalogoFile, setCatalogoFile] = useState<File | null>(null)
+  const [catalogoPreview, setCatalogoPreview] = useState('')
+  const [catalogoLoading, setCatalogoLoading] = useState(false)
+  const [catalogoResult, setCatalogoResult] = useState<any>(null)
+  const [catalogoError, setCatalogoError] = useState('')
+  const [proveedores, setProveedores] = useState<any[]>([])
+  const [proveedorSel, setProveedorSel] = useState('')
+  const [guardandoCatalogo, setGuardandoCatalogo] = useState(false)
+  const [productosEditados, setProductosEditados] = useState<any[]>([])
   const [fechaManual, setFechaManual] = useState('')
 
   useEffect(() => {
@@ -155,16 +181,291 @@ export default function IAFacturas() {
     setGuardandoGasto(false)
   }
 
+  // Cargar proveedores
+  useEffect(() => {
+    supabase.from('proveedores').select('id, nombre').order('nombre').then(r => {
+      if (r.data) setProveedores(r.data)
+    })
+  }, [])
+
+  // Analizar catálogo con IA
+  const analizarCatalogo = async () => {
+    if (!catalogoFile) return globalToast('Sube una imagen del catálogo', 'error')
+    if (!apiKey) return globalToast('Configura tu API Key de Groq primero', 'error')
+    setCatalogoLoading(true); setCatalogoError(''); setCatalogoResult(null)
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve((e.target?.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(catalogoFile)
+      })
+
+      const isImage = catalogoFile.type.startsWith('image/')
+      const messages = [{
+        role: 'user',
+        content: isImage ? [
+          { type: 'image_url', image_url: { url: `data:${catalogoFile.type};base64,${base64}` } },
+          { type: 'text', text: PROMPT_CATALOGO }
+        ] : [{ type: 'text', text: PROMPT_CATALOGO }]
+      }]
+
+      let resultado = null
+      for (const modelo of GROQ_MODELOS) {
+        try {
+          const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: modelo, messages, max_tokens: 4000, temperature: 0.1 })
+          })
+          const data = await resp.json()
+          if (data.choices?.[0]?.message?.content) {
+            const text = data.choices[0].message.content.trim()
+              .replace(/^```json[\r\n]?/, '').replace(/[\r\n]?```$/, '').trim()
+            resultado = JSON.parse(text)
+            break
+          }
+        } catch { continue }
+      }
+
+      if (!resultado) throw new Error('No se pudo analizar el catálogo')
+
+      setCatalogoResult(resultado)
+      setProductosEditados(resultado.productos || [])
+      if (resultado.proveedor) {
+        const match = proveedores.find(p => p.nombre.toLowerCase().includes(resultado.proveedor.toLowerCase()))
+        if (match) setProveedorSel(match.id)
+      }
+      globalToast(`✅ ${(resultado.productos || []).length} productos detectados`)
+    } catch (err: any) {
+      setCatalogoError(err.message)
+      globalToast('Error: ' + err.message, 'error')
+    }
+    setCatalogoLoading(false)
+  }
+
+  // Guardar precios del catálogo en proveedores + productos
+  const guardarCatalogo = async () => {
+    if (!productosEditados.length) return
+    if (!user) return
+    setGuardandoCatalogo(true)
+
+    let guardados = 0
+    for (const prod of productosEditados) {
+      if (!prod.nombre || !prod.precio_sin_iva) continue
+      // Buscar si el producto ya existe en la tabla productos
+      const { data: existing } = await supabase.from('productos')
+        .select('id, nombre').ilike('nombre', `%${prod.nombre}%`).limit(1)
+
+      if (existing && existing.length > 0) {
+        // Actualizar precio existente
+        await supabase.from('productos').update({
+          precio_sin_iva: Number(prod.precio_sin_iva),
+          iva: Number(prod.iva || 4)
+        }).eq('id', existing[0].id)
+        guardados++
+      } else {
+        // Crear producto nuevo
+        await supabase.from('productos').insert({
+          user_id: user.id,
+          nombre: prod.nombre.toUpperCase(),
+          precio_sin_iva: Number(prod.precio_sin_iva),
+          iva: Number(prod.iva || 4),
+          categoria: 'Pan',
+        })
+        guardados++
+      }
+    }
+
+    // Si se seleccionó proveedor, guardar referencia
+    if (proveedorSel && catalogoResult) {
+      await supabase.from('proveedores').update({
+        notas: `Último catálogo analizado: ${new Date().toLocaleDateString('es-ES')} — ${guardados} productos`
+      }).eq('id', proveedorSel)
+    }
+
+    globalToast(`✅ ${guardados} precios actualizados en productos`)
+    setGuardandoCatalogo(false)
+    setCatalogoResult(null)
+    setProductosEditados([])
+    setCatalogoFile(null)
+    setCatalogoPreview('')
+  }
+
   const ivaColor = (iva?: number) => !iva || iva <= 4 ? '#16a34a' : iva <= 10 ? '#E8670A' : '#dc2626'
 
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">🧠 IA — Análisis de Facturas</h1>
+        <h1 className="page-title">🧠 IA — Análisis</h1>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowSetup(!showSetup)}>
           🔑 {apiKey ? 'Cambiar API Key' : 'Configurar API Key'}
         </button>
       </div>
+
+      {/* TABS */}
+      <div className="tabs" style={{ marginBottom: 16 }}>
+        <div className={`tab ${tabIA === 'facturas' ? 'active' : ''}`} onClick={() => setTabIA('facturas')}>
+          📄 Analizar Facturas / Albaranes
+        </div>
+        <div className={`tab ${tabIA === 'catalogo' ? 'active' : ''}`} onClick={() => setTabIA('catalogo')}>
+          📦 Catálogo de Proveedor
+        </div>
+      </div>
+
+      {/* TAB CATÁLOGO */}
+      {tabIA === 'catalogo' && (
+        <div>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '14px 16px', marginBottom: 16, fontSize: '0.85rem', color: '#1e40af' }}>
+            <strong>📦 ¿Cómo funciona?</strong><br />
+            1. Sube la foto o PDF del catálogo de tu proveedor<br />
+            2. La IA detecta automáticamente todos los productos y precios<br />
+            3. Revisa y corrige si es necesario<br />
+            4. Pulsa "Guardar" — los precios se actualizan en tus productos automáticamente
+          </div>
+
+          {!apiKey && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 14, marginBottom: 16, color: '#dc2626', fontWeight: 700 }}>
+              ⚠️ Configura tu API Key de Groq primero (botón arriba a la derecha)
+            </div>
+          )}
+
+          {/* Subir imagen */}
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', marginBottom: 14 }}>📷 Subir catálogo</h3>
+            <div
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault()
+                const file = e.dataTransfer.files[0]
+                if (file) {
+                  setCatalogoFile(file)
+                  setCatalogoPreview(URL.createObjectURL(file))
+                  setCatalogoResult(null)
+                }
+              }}
+              style={{ border: '2px dashed #E8670A', borderRadius: 12, padding: '24px', textAlign: 'center', cursor: 'pointer', background: '#fff8f0' }}
+              onClick={() => document.getElementById('cat-input')?.click()}>
+              <input id="cat-input" type="file" accept="image/*,.pdf" style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) { setCatalogoFile(file); setCatalogoPreview(URL.createObjectURL(file)); setCatalogoResult(null) }
+                }} />
+              {catalogoPreview ? (
+                <img src={catalogoPreview} alt="catálogo" style={{ maxHeight: 300, maxWidth: '100%', borderRadius: 8 }} />
+              ) : (
+                <div>
+                  <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>📄</div>
+                  <div style={{ fontWeight: 700, color: 'var(--naranja)' }}>Arrastra la foto del catálogo aquí</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gris)', marginTop: 4 }}>o haz clic para seleccionar (JPG, PNG, PDF)</div>
+                </div>
+              )}
+            </div>
+
+            {catalogoFile && (
+              <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1 }}>
+                  <label className="input-label">Proveedor (opcional)</label>
+                  <select className="select" value={proveedorSel} onChange={e => setProveedorSel(e.target.value)}>
+                    <option value="">Seleccionar proveedor...</option>
+                    {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                </div>
+                <button className="btn btn-primary" onClick={analizarCatalogo} disabled={catalogoLoading}
+                  style={{ marginTop: 20, minWidth: 160 }}>
+                  {catalogoLoading ? '⏳ Analizando...' : '🧠 Analizar catálogo'}
+                </button>
+              </div>
+            )}
+
+            {catalogoError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginTop: 12, color: '#dc2626', fontSize: '0.85rem' }}>
+                ❌ {catalogoError}
+              </div>
+            )}
+          </div>
+
+          {/* Resultados del catálogo */}
+          {catalogoResult && productosEditados.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <h3 style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>
+                  ✅ {productosEditados.length} productos detectados
+                  {catalogoResult.proveedor && <span style={{ fontSize: '0.85rem', fontWeight: 400, marginLeft: 8 }}>— {catalogoResult.proveedor}</span>}
+                </h3>
+                <button className="btn btn-success" onClick={guardarCatalogo} disabled={guardandoCatalogo}>
+                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} precios`}
+                </button>
+              </div>
+
+              <div style={{ background: '#eff6ff', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
+                💡 Revisa y corrige los precios si es necesario antes de guardar. Se actualizarán en tus productos.
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th style={{ textAlign: 'center' }}>Precio sin IVA</th>
+                      <th style={{ textAlign: 'center' }}>IVA %</th>
+                      <th style={{ textAlign: 'center' }}>Precio con IVA</th>
+                      <th>Unidad</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productosEditados.map((prod, i) => (
+                      <tr key={i}>
+                        <td>
+                          <input className="input" style={{ minWidth: 200, padding: '4px 8px' }}
+                            value={prod.nombre}
+                            onChange={e => setProductosEditados(prev => prev.map((p, j) => j === i ? { ...p, nombre: e.target.value } : p))} />
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input className="input" type="number" step="0.01" min="0"
+                            style={{ width: 90, textAlign: 'center', padding: '4px 8px' }}
+                            value={prod.precio_sin_iva}
+                            onChange={e => setProductosEditados(prev => prev.map((p, j) => j === i ? { ...p, precio_sin_iva: parseFloat(e.target.value) || 0 } : p))} />
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <select className="select" style={{ width: 70, padding: '4px 6px' }}
+                            value={prod.iva || 4}
+                            onChange={e => setProductosEditados(prev => prev.map((p, j) => j === i ? { ...p, iva: parseInt(e.target.value) } : p))}>
+                            <option value={4}>4%</option>
+                            <option value={10}>10%</option>
+                            <option value={21}>21%</option>
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--naranja)' }}>
+                          {((prod.precio_sin_iva || 0) * (1 + (prod.iva || 4) / 100)).toFixed(2)} €
+                        </td>
+                        <td style={{ fontSize: '0.82rem', color: 'var(--gris)' }}>{prod.unidad || 'ud'}</td>
+                        <td>
+                          <button className="btn btn-danger btn-sm btn-icon"
+                            onClick={() => setProductosEditados(prev => prev.filter((_, j) => j !== i))}>
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ textAlign: 'right', marginTop: 12 }}>
+                <button className="btn btn-success" onClick={guardarCatalogo} disabled={guardandoCatalogo}>
+                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} precios en productos`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB FACTURAS — lo existente */}
+      {tabIA === 'facturas' && (<div>
 
       {showSetup && (
         <div className="card" style={{ marginBottom: 16, border: '2px solid #E8670A55', background: '#fff8f0' }}>
@@ -449,6 +750,7 @@ export default function IAFacturas() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
       `}</style>
+    </div>)}
     </div>
   )
 }
