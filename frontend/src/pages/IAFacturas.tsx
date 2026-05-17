@@ -323,7 +323,7 @@ export default function IAFacturas() {
             1. Sube la foto o PDF del catálogo de tu proveedor<br />
             2. La IA detecta automáticamente todos los productos y precios<br />
             3. Revisa y corrige si es necesario<br />
-            4. Pulsa "Guardar" — los precios se actualizan en tus productos automáticamente
+            4. Pulsa "Guardar" — los precios se guardan en Proveedores → Precios y se usan en Estadísticas
           </div>
 
           {!apiKey && (
@@ -396,7 +396,7 @@ export default function IAFacturas() {
                   {catalogoResult.proveedor && <span style={{ fontSize: '0.85rem', fontWeight: 400, marginLeft: 8 }}>— {catalogoResult.proveedor}</span>}
                 </h3>
                 <button className="btn btn-success" onClick={guardarCatalogo} disabled={guardandoCatalogo}>
-                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} precios`}
+                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} artículos en Proveedor`}
                 </button>
               </div>
 
@@ -457,7 +457,7 @@ export default function IAFacturas() {
 
               <div style={{ textAlign: 'right', marginTop: 12 }}>
                 <button className="btn btn-success" onClick={guardarCatalogo} disabled={guardandoCatalogo}>
-                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} precios en productos`}
+                  {guardandoCatalogo ? '⏳ Guardando...' : `💾 Guardar ${productosEditados.length} artículos en Proveedor`}
                 </button>
               </div>
             </div>

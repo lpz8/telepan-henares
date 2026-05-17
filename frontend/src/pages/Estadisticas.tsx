@@ -56,25 +56,27 @@ export default function Estadisticas() {
       const allGastos = gastos.data || []
       const allPedidos = allPedidosRaw
 
-      // Cargar costes de artículos de proveedores (tabla precios_proveedor)
+      // Cargar precios de proveedores para calcular margen real
       const { data: provPrecios } = await supabase
         .from('precios_proveedor')
         .select('articulo, precio_cliente, precio_pvp')
 
-      // Calcular coste total de proveedor basado en pedidos × precio_cliente del proveedor
-      // precio_cliente = lo que te cobra el proveedor (tu coste)
-      // precio_pvp = lo que tú vendes al cliente (tu precio)
-      const totalCosteProveedor = (provPrecios && provPrecios.length > 0)
-        ? allPedidos.reduce((s: number, p: any) => {
-            const nombre = (p as any).productos?.nombre || ''
-            const art = (provPrecios || []).find((a: any) =>
-              nombre.toLowerCase().includes(a.articulo?.toLowerCase() || '') ||
-              (a.articulo || '').toLowerCase().includes(nombre.toLowerCase())
-            )
-            const coste = art ? Number(art.precio_cliente || 0) : 0
-            return s + (Number(p.cantidad) * coste)
-          }, 0)
-        : 0
+      // Calcular coste total real basado en pedidos × precio_cliente del proveedor
+      // precio_cliente = lo que te cobra el proveedor = tu COSTE
+      let totalCosteProveedor = 0
+      if (provPrecios && provPrecios.length > 0) {
+        allPedidos.forEach((p: any) => {
+          const nombre = (p as any).productos?.nombre || ''
+          const art = provPrecios.find((a: any) => {
+            const artNombre = (a.articulo || '').toLowerCase()
+            const prodNombre = nombre.toLowerCase()
+            return prodNombre.includes(artNombre) || artNombre.includes(prodNombre)
+          })
+          if (art) {
+            totalCosteProveedor += Number(p.cantidad) * Number(art.precio_cliente || 0)
+          }
+        })
+      }
 
       const totalVentas = allFacturas.reduce((s, f) => s + Number(f.total), 0)
       const totalCobrado = allFacturas.filter(f => f.pagado).reduce((s, f) => s + Number(f.total), 0)
