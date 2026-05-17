@@ -76,6 +76,82 @@ export default function Pedidos() {
     supabase.from('productos').select('id, nombre, precio_sin_iva, iva, categoria').order('nombre').then(r => { if (r.data) setProductos(r.data) })
   }, [])
 
+  const generarMesCompleto = async () => {
+    if (!user) return
+    const anio = parseInt(fecha.split('-')[0])
+    const mes = parseInt(fecha.split('-')[1])
+    const diasEnMes = new Date(anio, mes, 0).getDate()
+    const primerDia = `${fecha.substring(0,7)}-01`
+    const ultimoDia = `${fecha.substring(0,7)}-${String(diasEnMes).padStart(2,'0')}`
+
+    if (!confirm(`¿Generar pedidos para TODO ${new Date(fecha+'T12:00:00').toLocaleString('es-ES',{month:'long',year:'numeric'})}?\n\nSe generarán los ${diasEnMes} días respetando:\n✅ Días habituales de cada cliente\n✅ Frecuencias (semanas pares/impares)\n✅ Suspensiones activas\n\nSe eliminarán los pedidos existentes del mes.`)) return
+
+    setLoading(true)
+    globalToast('⏳ Generando pedidos del mes...')
+
+    try {
+      // Eliminar pedidos existentes del mes
+      await supabase.from('pedidos').delete()
+        .gte('fecha', primerDia).lte('fecha', ultimoDia).eq('user_id', user.id)
+
+      // Obtener suspensiones del mes
+      const { data: susps } = await supabase.from('suspensiones_pedido')
+        .select('cliente_id, fecha_inicio, fecha_fin')
+      const suspList = susps || []
+
+      // Obtener todos los habituales
+      const { data: mods } = await supabase.from('pedidos_modelo')
+        .select('*, productos(precio_sin_iva, iva)')
+        .eq('user_id', user.id)
+
+      if (!mods || mods.length === 0) {
+        globalToast('No hay habituales configurados', 'error')
+        setLoading(false); return
+      }
+
+      let totalInserts = 0
+
+      // Recorrer cada día del mes
+      for (let dia = 1; dia <= diasEnMes; dia++) {
+        const fechaDia = `${fecha.substring(0,7)}-${String(dia).padStart(2,'0')}`
+        const dayOfWeek = new Date(fechaDia + 'T12:00:00').getDay()
+
+        // Habituales de ese día de la semana
+        const modsDia = mods.filter(m => m.dia_semana === dayOfWeek && m.cantidad > 0)
+        if (modsDia.length === 0) continue
+
+        // Clientes suspendidos ese día
+        const clientesSusp = new Set(
+          suspList
+            .filter(s => s.fecha_inicio <= fechaDia && s.fecha_fin >= fechaDia)
+            .map(s => s.cliente_id)
+        )
+
+        const inserts = modsDia
+          .filter(m => !clientesSusp.has(m.cliente_id))
+          .filter(m => shouldInclude(m.frecuencia, fechaDia))
+          .map(m => ({
+            user_id: user.id, fecha: fechaDia,
+            cliente_id: m.cliente_id, producto_id: m.producto_id,
+            cantidad: m.cantidad,
+            precio: Number(m.productos?.precio_sin_iva || 0),
+            iva: Number(m.productos?.iva || 4)
+          }))
+
+        if (inserts.length > 0) {
+          await supabase.from('pedidos').insert(inserts)
+          totalInserts += inserts.length
+        }
+      }
+
+      globalToast(`✅ Mes generado — ${totalInserts} líneas de pedido en ${diasEnMes} días`)
+      load()
+    } catch (err: any) {
+      globalToast('Error: ' + err.message, 'error')
+    }
+    setLoading(false)
+  }
+
   const generarPedidos = async () => {
     if (!user) return
     const dayOfWeek = new Date(fecha + 'T12:00:00').getDay()
@@ -259,6 +335,9 @@ export default function Pedidos() {
         <div className="page-actions">
           <input type="date" className="input" style={{ width: 'auto' }} value={fecha} onChange={e => setFecha(e.target.value)} />
           <button className="btn btn-success" onClick={generarPedidos} disabled={loading}><Zap size={16} /> {loading ? 'Generando...' : 'Generar día'}</button>
+          <button className="btn btn-secondary" onClick={generarMesCompleto} disabled={loading} title="Generar todos los pedidos del mes de golpe">
+            📅 Generar mes
+          </button>
           <button className="btn btn-primary" onClick={() => setOpenManual(true)}><Plus size={16} /> Añadir</button>
           {pedidos.length > 0 && (
             <button className="btn btn-danger" onClick={async () => {
