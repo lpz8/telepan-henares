@@ -16,13 +16,46 @@ export default function Proveedores() {
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState(empty)
   const [busqueda, setBusqueda] = useState('')
+  const [misProductos, setMisProductos] = useState<any[]>([])
+  const [buscadorPVP, setBuscadorPVP] = useState<string | null>(null) // id del precio que está buscando producto
+  const [busqProducto, setBusqProducto] = useState('')
 
   const load = async () => {
     const { data } = await supabase.from('proveedores').select('*').order('nombre')
     if (data) setProveedores(data)
   }
 
-  useEffect(() => { load() }, [])
+  // Cargar mis productos para sincronizar PVP
+  const loadProductos = async () => {
+    const { data } = await supabase.from('productos').select('id, nombre, precio_sin_iva, iva').order('nombre')
+    if (data) setMisProductos(data)
+  }
+
+  useEffect(() => { load(); loadProductos() }, [])
+
+  // Buscar producto coincidente por nombre (para auto-rellenar PVP)
+  const buscarProductoCoincidente = (nombreArticulo: string) => {
+    const n = nombreArticulo.toLowerCase().trim()
+    return misProductos.find(p => {
+      const pn = p.nombre.toLowerCase().trim()
+      return pn === n || pn.includes(n) || n.includes(pn)
+    })
+  }
+
+  // Auto-sincronizar PVP de todos los artículos de un proveedor
+  const autoSincronizarPVP = async (proveedorId: string, preciosList: any[]) => {
+    let actualizados = 0
+    for (const precio of preciosList) {
+      if (Number(precio.precio_pvp) > 0) continue // ya tiene PVP, no tocar
+      const match = buscarProductoCoincidente(precio.articulo)
+      if (match) {
+        const pvp = Number(match.precio_sin_iva) * (1 + Number(match.iva || 4) / 100)
+        await supabase.from('precios_proveedor').update({ precio_pvp: parseFloat(pvp.toFixed(4)) }).eq('id', precio.id)
+        actualizados++
+      }
+    }
+    return actualizados
+  }
 
   const f = (k: string, v: any) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -52,6 +85,21 @@ export default function Proveedores() {
       .order('categoria').order('articulo')
     setPrecios(data || [])
     setOpenPrecios(proveedorId)
+
+    // Auto-sincronizar PVP con mis productos
+    if (data && data.length > 0 && misProductos.length > 0) {
+      const actualizados = await autoSincronizarPVP(proveedorId, data)
+      if (actualizados > 0) {
+        // Recargar con los PVPs actualizados
+        const { data: data2 } = await supabase
+          .from('precios_proveedor')
+          .select('*')
+          .eq('proveedor_id', proveedorId)
+          .order('categoria').order('articulo')
+        setPrecios(data2 || [])
+        globalToast(`✅ ${actualizados} precios PVP sincronizados automáticamente`)
+      }
+    }
   }
 
   const añadirPrecio = async () => {
@@ -241,30 +289,87 @@ export default function Proveedores() {
               {/* Tabla de precios */}
               {precios.length > 0 ? (
                 <div className="table-wrap">
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 14px', marginBottom: 10, fontSize: '0.82rem', color: '#1e40af' }}>
+                    💡 <strong>Yo vendo</strong> se sincroniza automáticamente con tus productos. Si sale 0.00, pulsa 🔍 para buscar el producto equivalente.
+                  </div>
                   <table>
                     <thead>
-                      <tr><th>Cód.</th><th>Artículo</th><th>Cat.</th><th>Me cobra</th><th>Yo vendo</th><th>Margen</th><th></th></tr>
+                      <tr><th>Cód.</th><th>Artículo proveedor</th><th>Cat.</th><th>Me cobra</th><th>Yo vendo</th><th>Margen</th><th></th></tr>
                     </thead>
                     <tbody>
                       {precios.map((p: any) => {
                         const margen = Number(p.precio_pvp) - Number(p.precio_cliente)
                         const pct = p.precio_cliente > 0 ? (margen / Number(p.precio_cliente) * 100).toFixed(1) : '0'
+                        const sinPVP = Number(p.precio_pvp) === 0
                         return (
-                          <tr key={p.id}>
+                          <>
+                          <tr key={p.id} style={{ background: sinPVP ? '#fefce8' : 'white' }}>
                             <td style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{p.codigo || '—'}</td>
                             <td><strong>{p.articulo}</strong></td>
                             <td><span className="badge badge-gray">{p.categoria}</span></td>
                             <td style={{ color: '#dc2626', fontWeight: 700 }}>{Number(p.precio_cliente).toFixed(4)} €</td>
-                            <td style={{ color: '#16a34a', fontWeight: 700 }}>{Number(p.precio_pvp).toFixed(2)} €</td>
                             <td>
-                              <span style={{ color: margen >= 0 ? '#16a34a' : '#dc2626', fontWeight: 800, fontSize: '0.82rem' }}>
-                                {margen >= 0 ? '+' : ''}{margen.toFixed(4)}€ ({pct}%)
-                              </span>
+                              {sinPVP ? (
+                                <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '0.8rem' }}>
+                                  ⚠️ Sin vincular
+                                </span>
+                              ) : (
+                                <span style={{ color: '#16a34a', fontWeight: 700 }}>{Number(p.precio_pvp).toFixed(2)} €</span>
+                              )}
                             </td>
                             <td>
+                              {!sinPVP && (
+                                <span style={{ color: margen >= 0 ? '#16a34a' : '#dc2626', fontWeight: 800, fontSize: '0.82rem' }}>
+                                  {margen >= 0 ? '+' : ''}{margen.toFixed(4)}€ ({pct}%)
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-secondary btn-sm" title="Buscar mi producto equivalente"
+                                onClick={() => { setBuscadorPVP(p.id); setBusqProducto('') }}>
+                                🔍
+                              </button>
                               <button className="btn btn-danger btn-sm btn-icon" onClick={() => eliminarPrecio(p.id)}>🗑</button>
                             </td>
                           </tr>
+                          {/* Buscador de producto para vincular */}
+                          {buscadorPVP === p.id && (
+                            <tr key={p.id + '_search'}>
+                              <td colSpan={7} style={{ background: '#f0fdf4', padding: '10px 14px' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 6, color: '#16a34a' }}>
+                                  🔍 Busca tu producto para vincularlo con "{p.articulo}":
+                                </div>
+                                <input className="input" placeholder="Escribe el nombre de tu producto..."
+                                  value={busqProducto} onChange={e => setBusqProducto(e.target.value)}
+                                  style={{ marginBottom: 8 }} autoFocus />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+                                  {misProductos
+                                    .filter(mp => !busqProducto || mp.nombre.toLowerCase().includes(busqProducto.toLowerCase()))
+                                    .slice(0, 10)
+                                    .map(mp => {
+                                      const pvp = Number(mp.precio_sin_iva) * (1 + Number(mp.iva || 4) / 100)
+                                      return (
+                                        <div key={mp.id}
+                                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', border: '1px solid #bbf7d0', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}
+                                          onClick={async () => {
+                                            await supabase.from('precios_proveedor').update({ precio_pvp: parseFloat(pvp.toFixed(4)) }).eq('id', p.id)
+                                            const { data: d2 } = await supabase.from('precios_proveedor').select('*').eq('proveedor_id', openPrecios).order('categoria').order('articulo')
+                                            setPrecios(d2 || [])
+                                            setBuscadorPVP(null)
+                                            globalToast(`✅ "${p.articulo}" vinculado con "${mp.nombre}" — PVP: ${pvp.toFixed(2)}€`)
+                                          }}>
+                                          <span style={{ fontWeight: 700 }}>{mp.nombre}</span>
+                                          <span style={{ color: '#16a34a', fontWeight: 800 }}>{pvp.toFixed(2)} €</span>
+                                        </div>
+                                      )
+                                    })
+                                  }
+                                </div>
+                                <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setBuscadorPVP(null)}>Cancelar</button>
+                              </td>
+                            </tr>
+                          )}
+                          </>
                         )
                       })}
                     </tbody>
