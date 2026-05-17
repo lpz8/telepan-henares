@@ -245,47 +245,48 @@ export default function IAFacturas() {
     setCatalogoLoading(false)
   }
 
-  // Guardar precios del catálogo en proveedores + productos
+  // Guardar artículos del catálogo en precios_proveedor
   const guardarCatalogo = async () => {
     if (!productosEditados.length) return
     if (!user) return
+    if (!proveedorSel) return globalToast('Selecciona el proveedor primero', 'error')
     setGuardandoCatalogo(true)
 
     let guardados = 0
     for (const prod of productosEditados) {
-      if (!prod.nombre || !prod.precio_sin_iva) continue
-      // Buscar si el producto ya existe en la tabla productos
-      const { data: existing } = await supabase.from('productos')
-        .select('id, nombre').ilike('nombre', `%${prod.nombre}%`).limit(1)
+      if (!prod.nombre || prod.precio_sin_iva === undefined) continue
+
+      // Buscar si ya existe este artículo en precios_proveedor
+      const { data: existing } = await supabase
+        .from('precios_proveedor')
+        .select('id')
+        .eq('proveedor_id', proveedorSel)
+        .ilike('articulo', prod.nombre)
+        .limit(1)
 
       if (existing && existing.length > 0) {
-        // Actualizar precio existente
-        await supabase.from('productos').update({
-          precio_sin_iva: Number(prod.precio_sin_iva),
-          iva: Number(prod.iva || 4)
+        await supabase.from('precios_proveedor').update({
+          precio_cliente: Number(prod.precio_sin_iva),
         }).eq('id', existing[0].id)
-        guardados++
       } else {
-        // Crear producto nuevo
-        await supabase.from('productos').insert({
+        await supabase.from('precios_proveedor').insert({
           user_id: user.id,
-          nombre: prod.nombre.toUpperCase(),
-          precio_sin_iva: Number(prod.precio_sin_iva),
-          iva: Number(prod.iva || 4),
+          proveedor_id: proveedorSel,
+          articulo: prod.nombre.toUpperCase(),
+          precio_cliente: Number(prod.precio_sin_iva),
+          precio_pvp: 0,
           categoria: 'Pan',
+          codigo: ''
         })
-        guardados++
       }
+      guardados++
     }
 
-    // Si se seleccionó proveedor, guardar referencia
-    if (proveedorSel && catalogoResult) {
-      await supabase.from('proveedores').update({
-        notas: `Último catálogo analizado: ${new Date().toLocaleDateString('es-ES')} — ${guardados} productos`
-      }).eq('id', proveedorSel)
-    }
+    await supabase.from('proveedores').update({
+      notas: `Catálogo actualizado: ${new Date().toLocaleDateString('es-ES')} — ${guardados} artículos`
+    }).eq('id', proveedorSel)
 
-    globalToast(`✅ ${guardados} precios actualizados en productos`)
+    globalToast(`✅ ${guardados} artículos guardados en Proveedores → Precios`)
     setGuardandoCatalogo(false)
     setCatalogoResult(null)
     setProductosEditados([])

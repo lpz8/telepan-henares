@@ -56,6 +56,26 @@ export default function Estadisticas() {
       const allGastos = gastos.data || []
       const allPedidos = allPedidosRaw
 
+      // Cargar costes de artículos de proveedores (tabla precios_proveedor)
+      const { data: provPrecios } = await supabase
+        .from('precios_proveedor')
+        .select('articulo, precio_cliente, precio_pvp')
+
+      // Calcular coste total de proveedor basado en pedidos × precio_cliente del proveedor
+      // precio_cliente = lo que te cobra el proveedor (tu coste)
+      // precio_pvp = lo que tú vendes al cliente (tu precio)
+      const totalCosteProveedor = (provPrecios && provPrecios.length > 0)
+        ? allPedidos.reduce((s: number, p: any) => {
+            const nombre = (p as any).productos?.nombre || ''
+            const art = (provPrecios || []).find((a: any) =>
+              nombre.toLowerCase().includes(a.articulo?.toLowerCase() || '') ||
+              (a.articulo || '').toLowerCase().includes(nombre.toLowerCase())
+            )
+            const coste = art ? Number(art.precio_cliente || 0) : 0
+            return s + (Number(p.cantidad) * coste)
+          }, 0)
+        : 0
+
       const totalVentas = allFacturas.reduce((s, f) => s + Number(f.total), 0)
       const totalCobrado = allFacturas.filter(f => f.pagado).reduce((s, f) => s + Number(f.total), 0)
       const totalPendiente = totalVentas - totalCobrado
@@ -69,8 +89,8 @@ export default function Estadisticas() {
         ventas: totalVentas,
         cobrado: totalCobrado,
         pendiente: totalPendiente,
-        gastos: totalGastos,
-        beneficio: totalCobrado - totalGastos,
+        gastos: totalCosteProveedor > 0 ? totalCosteProveedor + totalGastos : totalGastos,
+        beneficio: totalCosteProveedor > 0 ? totalCobrado - totalCosteProveedor - totalGastos : totalCobrado - totalGastos,
         clientes: clientes.count || 0,
         productos: productos.count || 0,
         facturas: allFacturas.length,
