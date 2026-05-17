@@ -17,8 +17,10 @@ export default function Proveedores() {
   const [form, setForm] = useState(empty)
   const [busqueda, setBusqueda] = useState('')
   const [misProductos, setMisProductos] = useState<any[]>([])
-  const [buscadorPVP, setBuscadorPVP] = useState<string | null>(null) // id del precio que está buscando producto
+  const [buscadorPVP, setBuscadorPVP] = useState<string | null>(null)
   const [busqProducto, setBusqProducto] = useState('')
+  const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null) // id del precio en edición
+  const [editValores, setEditValores] = useState({ precio_cliente: 0, precio_pvp: 0, articulo: '' })
 
   const load = async () => {
     const { data } = await supabase.from('proveedores').select('*').order('nombre')
@@ -118,6 +120,25 @@ export default function Proveedores() {
   const eliminarPrecio = async (id: string) => {
     await supabase.from('precios_proveedor').delete().eq('id', id)
     setPrecios(prev => prev.filter((p: any) => p.id !== id))
+  }
+
+  const abrirEdicion = (p: any) => {
+    setEditandoPrecio(p.id)
+    setEditValores({ precio_cliente: Number(p.precio_cliente), precio_pvp: Number(p.precio_pvp), articulo: p.articulo })
+    setBuscadorPVP(null)
+  }
+
+  const guardarEdicion = async () => {
+    if (!editandoPrecio) return
+    await supabase.from('precios_proveedor').update({
+      articulo: editValores.articulo,
+      precio_cliente: editValores.precio_cliente,
+      precio_pvp: editValores.precio_pvp,
+    }).eq('id', editandoPrecio)
+    const { data } = await supabase.from('precios_proveedor').select('*').eq('proveedor_id', openPrecios).order('categoria').order('articulo')
+    setPrecios(data || [])
+    setEditandoPrecio(null)
+    globalToast('✅ Artículo actualizado')
   }
 
   const filteredProv = proveedores.filter(p => {
@@ -301,35 +322,71 @@ export default function Proveedores() {
                         const margen = Number(p.precio_pvp) - Number(p.precio_cliente)
                         const pct = p.precio_cliente > 0 ? (margen / Number(p.precio_cliente) * 100).toFixed(1) : '0'
                         const sinPVP = Number(p.precio_pvp) === 0
+                        const enEdicion = editandoPrecio === p.id
                         return (
                           <>
-                          <tr key={p.id} style={{ background: sinPVP ? '#fefce8' : 'white' }}>
+                          <tr key={p.id} style={{ background: enEdicion ? '#fff8f0' : sinPVP ? '#fefce8' : 'white' }}>
                             <td style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{p.codigo || '—'}</td>
-                            <td><strong>{p.articulo}</strong></td>
-                            <td><span className="badge badge-gray">{p.categoria}</span></td>
-                            <td style={{ color: '#dc2626', fontWeight: 700 }}>{Number(p.precio_cliente).toFixed(4)} €</td>
                             <td>
-                              {sinPVP ? (
-                                <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '0.8rem' }}>
-                                  ⚠️ Sin vincular
-                                </span>
+                              {enEdicion ? (
+                                <input className="input" style={{ padding: '3px 8px', minWidth: 160 }}
+                                  value={editValores.articulo}
+                                  onChange={e => setEditValores(v => ({ ...v, articulo: e.target.value.toUpperCase() }))} />
+                              ) : <strong>{p.articulo}</strong>}
+                            </td>
+                            <td><span className="badge badge-gray">{p.categoria}</span></td>
+                            <td>
+                              {enEdicion ? (
+                                <input className="input" type="number" step="0.0001" min="0"
+                                  style={{ width: 90, padding: '3px 8px', textAlign: 'right' }}
+                                  value={editValores.precio_cliente}
+                                  onChange={e => setEditValores(v => ({ ...v, precio_cliente: parseFloat(e.target.value) || 0 }))} />
+                              ) : (
+                                <span style={{ color: '#dc2626', fontWeight: 700 }}>{Number(p.precio_cliente).toFixed(4)} €</span>
+                              )}
+                            </td>
+                            <td>
+                              {enEdicion ? (
+                                <input className="input" type="number" step="0.01" min="0"
+                                  style={{ width: 90, padding: '3px 8px', textAlign: 'right' }}
+                                  value={editValores.precio_pvp}
+                                  onChange={e => setEditValores(v => ({ ...v, precio_pvp: parseFloat(e.target.value) || 0 }))} />
+                              ) : sinPVP ? (
+                                <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '0.8rem' }}>⚠️ Sin vincular</span>
                               ) : (
                                 <span style={{ color: '#16a34a', fontWeight: 700 }}>{Number(p.precio_pvp).toFixed(2)} €</span>
                               )}
                             </td>
                             <td>
-                              {!sinPVP && (
+                              {!sinPVP && !enEdicion && (
                                 <span style={{ color: margen >= 0 ? '#16a34a' : '#dc2626', fontWeight: 800, fontSize: '0.82rem' }}>
                                   {margen >= 0 ? '+' : ''}{margen.toFixed(4)}€ ({pct}%)
                                 </span>
                               )}
+                              {enEdicion && editValores.precio_cliente > 0 && editValores.precio_pvp > 0 && (
+                                <span style={{ color: editValores.precio_pvp >= editValores.precio_cliente ? '#16a34a' : '#dc2626', fontWeight: 800, fontSize: '0.78rem' }}>
+                                  {(editValores.precio_pvp - editValores.precio_cliente) >= 0 ? '+' : ''}
+                                  {(editValores.precio_pvp - editValores.precio_cliente).toFixed(4)}€
+                                </span>
+                              )}
                             </td>
                             <td style={{ display: 'flex', gap: 4 }}>
-                              <button className="btn btn-secondary btn-sm" title="Buscar mi producto equivalente"
-                                onClick={() => { setBuscadorPVP(p.id); setBusqProducto('') }}>
-                                🔍
-                              </button>
-                              <button className="btn btn-danger btn-sm btn-icon" onClick={() => eliminarPrecio(p.id)}>🗑</button>
+                              {enEdicion ? (
+                                <>
+                                  <button className="btn btn-success btn-sm" onClick={guardarEdicion}>✅</button>
+                                  <button className="btn btn-secondary btn-sm" onClick={() => setEditandoPrecio(null)}>✕</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="btn btn-secondary btn-sm btn-icon" title="Editar nombre y precios"
+                                    onClick={() => abrirEdicion(p)}>✏️</button>
+                                  <button className="btn btn-secondary btn-sm" title="Buscar mi producto para vincular PVP"
+                                    onClick={() => { setBuscadorPVP(p.id); setBusqProducto(''); setEditandoPrecio(null) }}>
+                                    🔍
+                                  </button>
+                                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => eliminarPrecio(p.id)}>🗑</button>
+                                </>
+                              )}
                             </td>
                           </tr>
                           {/* Buscador de producto para vincular */}
