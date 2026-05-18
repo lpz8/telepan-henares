@@ -375,26 +375,26 @@ export default function Proveedores() {
       {/* MODAL BUSCADOR PVP */}
       {buscadorPVP && (
         <div className="modal-overlay" onClick={() => setBuscadorPVP(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🔍 Vincular con mi producto</h3>
-              <button className="btn-close" onClick={() => setBuscadorPVP(null)}>✕</button>
+              <h3 className="modal-title">🔍 Vincular con mi producto</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setBuscadorPVP(null)}><X size={16}/></button>
             </div>
-            <div style={{ padding: '12px 0' }}>
+            <div className="modal-body">
               <p style={{ fontSize: '0.85rem', color: 'var(--gris)', marginBottom: 12 }}>
                 Busca tu producto equivalente para sincronizar el precio de venta:
               </p>
               <input className="input" placeholder="Escribe el nombre de tu producto..."
                 value={busqProducto} onChange={e => setBusqProducto(e.target.value)} autoFocus />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto', marginTop: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto', marginTop: 10 }}>
                 {misProductos
                   .filter(mp => !busqProducto || mp.nombre.toLowerCase().includes(busqProducto.toLowerCase()))
-                  .slice(0, 15)
+                  .slice(0, 20)
                   .map(mp => {
                     const pvp = Number(mp.precio_sin_iva) * (1 + Number(mp.iva || 4) / 100)
                     return (
                       <div key={mp.id}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', cursor: 'pointer' }}
                         onClick={async () => {
                           await supabase.from('precios_proveedor').update({ precio_pvp: parseFloat(pvp.toFixed(4)) }).eq('id', buscadorPVP)
                           const { data: d2 } = await supabase.from('precios_proveedor').select('*').eq('proveedor_id', openPrecios).order('categoria').order('articulo')
@@ -420,31 +420,31 @@ export default function Proveedores() {
       {/* MODAL EDITAR PRECIO */}
       {editandoPrecio && (
         <div className="modal-overlay" onClick={() => setEditandoPrecio(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>✏️ Editar artículo</h3>
-              <button className="btn-close" onClick={() => setEditandoPrecio(null)}>✕</button>
+              <h3 className="modal-title">✏️ Editar artículo</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setEditandoPrecio(null)}><X size={16}/></button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 0' }}>
-              <div>
+            <div className="modal-body">
+              <div className="input-group">
                 <label className="input-label">Nombre del artículo</label>
                 <input className="input" value={editValores.articulo}
                   onChange={e => setEditValores(v => ({ ...v, articulo: e.target.value.toUpperCase() }))} />
               </div>
-              <div>
+              <div className="input-group">
                 <label className="input-label">Me cobra el proveedor (€ sin IVA)</label>
                 <input className="input" type="number" step="0.0001" min="0"
                   value={editValores.precio_cliente}
                   onChange={e => setEditValores(v => ({ ...v, precio_cliente: parseFloat(e.target.value) || 0 }))} />
               </div>
-              <div>
+              <div className="input-group">
                 <label className="input-label">Yo vendo al cliente (€ con IVA)</label>
                 <input className="input" type="number" step="0.01" min="0"
                   value={editValores.precio_pvp}
                   onChange={e => setEditValores(v => ({ ...v, precio_pvp: parseFloat(e.target.value) || 0 }))} />
               </div>
               {editValores.precio_cliente > 0 && editValores.precio_pvp > 0 && (
-                <div style={{ background: editValores.precio_pvp >= editValores.precio_cliente ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 14px', fontWeight: 800 }}>
+                <div style={{ background: editValores.precio_pvp >= editValores.precio_cliente ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 14px', fontWeight: 800, marginTop: 8 }}>
                   {editValores.precio_pvp >= editValores.precio_cliente
                     ? `✅ Margen: +${(editValores.precio_pvp - editValores.precio_cliente).toFixed(4)}€ (${((editValores.precio_pvp - editValores.precio_cliente) / editValores.precio_cliente * 100).toFixed(1)}%)`
                     : `⚠️ Vendes por debajo del coste`}
@@ -453,7 +453,7 @@ export default function Proveedores() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setEditandoPrecio(null)}>Cancelar</button>
-              <button className="btn btn-success" onClick={guardarEdicion}>✅ Guardar</button>
+              <button className="btn btn-success" onClick={guardarEdicion}>💾 Guardar</button>
             </div>
           </div>
         </div>
