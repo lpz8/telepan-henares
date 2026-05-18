@@ -348,14 +348,14 @@ export default function Proveedores() {
                                 </span>
                               )}
                             </td>
-                            <td>
-                              <button className="btn btn-secondary btn-sm" style={{marginRight:4,padding:'4px 8px'}}
+                            <td style={{whiteSpace:'nowrap'}}>
+                              <button className="btn btn-secondary btn-sm" style={{padding:'4px 8px',marginRight:3}}
                                 title="Editar" onClick={() => abrirEdicion(p)}>✏️</button>
-                              <button className="btn btn-secondary btn-sm" style={{marginRight:4,padding:'4px 8px'}}
+                              <button className="btn btn-secondary btn-sm" style={{padding:'4px 8px',marginRight:3}}
                                 title="Vincular con mi producto"
                                 onClick={() => { setBuscadorPVP(buscadorPVP === p.id ? null : p.id); setBusqProducto('') }}>🔍</button>
                               <button className="btn btn-danger btn-sm" style={{padding:'4px 8px'}}
-                                onClick={() => eliminarPrecio(p.id)}>🗑</button>
+                                onClick={() => eliminarPrecio(p.id)}>🗑️</button>
                             </td>
                           </tr>
                         )
