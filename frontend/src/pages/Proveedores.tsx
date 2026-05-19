@@ -19,7 +19,9 @@ export default function Proveedores() {
   const [misProductos, setMisProductos] = useState<any[]>([])
   const [buscadorPVP, setBuscadorPVP] = useState<string | null>(null)
   const [busqProducto, setBusqProducto] = useState('')
-  const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null) // id del precio en edición
+  const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null)
+  const [pagoModal, setPagoModal] = useState<any>(null) // proveedor al que se paga
+  const [pagoForm, setPagoForm] = useState({ concepto: '', importe: 0, forma_pago: 'Transferencia', fecha: new Date().toISOString().split('T')[0], notas: '' }) // id del precio en edición
   const [editValores, setEditValores] = useState({ precio_cliente: 0, precio_pvp: 0, articulo: '' })
 
   const load = async () => {
@@ -122,6 +124,24 @@ export default function Proveedores() {
     setPrecios(prev => prev.filter((p: any) => p.id !== id))
   }
 
+  const registrarPago = async () => {
+    if (!pagoModal || !user) return
+    if (!pagoForm.concepto.trim()) return globalToast('El concepto es obligatorio', 'error')
+    if (!pagoForm.importe || pagoForm.importe <= 0) return globalToast('El importe debe ser mayor que 0', 'error')
+    await supabase.from('gastos').insert({
+      user_id: user.id,
+      concepto: pagoForm.concepto,
+      categoria: '🚛 Proveedor',
+      importe: pagoForm.importe,
+      fecha: pagoForm.fecha,
+      forma_pago: pagoForm.forma_pago,
+      notas: 'Proveedor: ' + pagoModal.nombre + (pagoForm.notas ? ' — ' + pagoForm.notas : '')
+    })
+    globalToast('✅ Pago de ' + pagoForm.importe.toFixed(2) + '€ a ' + pagoModal.nombre + ' registrado en Gastos')
+    setPagoModal(null)
+    setPagoForm({ concepto: '', importe: 0, forma_pago: 'Transferencia', fecha: new Date().toISOString().split('T')[0], notas: '' })
+  }
+
   const abrirEdicion = (p: any) => {
     setEditandoPrecio(p.id)
     setEditValores({ precio_cliente: Number(p.precio_cliente), precio_pvp: Number(p.precio_pvp), articulo: p.articulo })
@@ -184,6 +204,12 @@ export default function Proveedores() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => verPrecios(p.id)}>
                         📋 Precios
+                      </button>
+                      <button className="btn btn-success btn-sm" onClick={() => {
+                        setPagoModal(p)
+                        setPagoForm({ concepto: `Pago ${p.nombre}`, importe: 0, forma_pago: 'Transferencia', fecha: new Date().toISOString().split('T')[0], notas: '' })
+                      }}>
+                        💳 Pago
                       </button>
                       <button className="btn btn-secondary btn-sm btn-icon" onClick={() => {
                         setEditing(p)
@@ -458,6 +484,63 @@ export default function Proveedores() {
           </div>
         </div>
       )}
+      {/* MODAL REGISTRAR PAGO */}
+      {pagoModal && (
+        <div className="modal-overlay" onClick={() => setPagoModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">💳 Registrar pago — {pagoModal.nombre}</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setPagoModal(null)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <div className="input-group">
+                <label className="input-label">Concepto del pago *</label>
+                <input className="input" value={pagoForm.concepto}
+                  onChange={e => setPagoForm(v => ({ ...v, concepto: e.target.value }))}
+                  placeholder="Ej: Liquidación mayo, Semanas 18-20..." />
+              </div>
+              <div className="form-grid-2">
+                <div className="input-group">
+                  <label className="input-label">Importe (€) *</label>
+                  <input className="input" type="number" step="0.01" min="0"
+                    value={pagoForm.importe}
+                    onChange={e => setPagoForm(v => ({ ...v, importe: parseFloat(e.target.value) || 0 }))} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Fecha del pago</label>
+                  <input className="input" type="date" value={pagoForm.fecha}
+                    onChange={e => setPagoForm(v => ({ ...v, fecha: e.target.value }))} />
+                </div>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Forma de pago</label>
+                <select className="select" value={pagoForm.forma_pago}
+                  onChange={e => setPagoForm(v => ({ ...v, forma_pago: e.target.value }))}>
+                  <option>Transferencia</option>
+                  <option>Bizum</option>
+                  <option>Efectivo</option>
+                  <option>Tarjeta</option>
+                  <option>Domiciliación</option>
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Notas adicionales (opcional)</label>
+                <input className="input" value={pagoForm.notas}
+                  onChange={e => setPagoForm(v => ({ ...v, notas: e.target.value }))}
+                  placeholder="Ej: Factura nº 456, referencia transferencia..." />
+              </div>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 700 }}>
+                ✅ Este pago se guardará automáticamente en <strong>Gastos</strong> con categoría 🚛 Proveedor
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setPagoModal(null)}>Cancelar</button>
+              <button className="btn btn-success" onClick={registrarPago}>💾 Registrar pago</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
