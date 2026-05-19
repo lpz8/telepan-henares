@@ -5,13 +5,32 @@ import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
-const CATEGORIAS = ['General', 'Proveedor', 'Materias Primas', 'Personal', 'Transporte', 'Suministros', 'Alquiler', 'Seguros', 'Otros']
+const CATEGORIAS = [
+  '⛽ Gasoil',
+  '🚛 Proveedor',
+  '🥖 Materias Primas',
+  '👤 Autónomo/Seguro Social',
+  '🔧 Mantenimiento/Averías',
+  '📱 Teléfono/Internet',
+  '🏛️ Seguros',
+  '🏠 Alquiler',
+  '💊 Otros Gastos Fijos',
+  '📦 Otros'
+]
 const CAT_BADGE: Record<string, string> = {
-  'Proveedor': 'badge-orange', 'Materias Primas': 'badge-orange', 'Personal': 'badge-blue',
-  'Transporte': 'badge-green', 'Suministros': 'badge-yellow', 'Alquiler': 'badge-purple',
-  'Seguros': 'badge-red', 'Otros': 'badge-gray'
+  '⛽ Gasoil': 'badge-yellow',
+  '🚛 Proveedor': 'badge-orange',
+  '🥖 Materias Primas': 'badge-orange',
+  '👤 Autónomo/Seguro Social': 'badge-blue',
+  '🔧 Mantenimiento/Averías': 'badge-gray',
+  '📱 Teléfono/Internet': 'badge-blue',
+  '🏛️ Seguros': 'badge-red',
+  '🏠 Alquiler': 'badge-purple',
+  '💊 Otros Gastos Fijos': 'badge-gray',
+  '📦 Otros': 'badge-gray',
 }
-const empty = { concepto: '', categoria: 'General', importe: 0, fecha: new Date().toISOString().split('T')[0] }
+const FORMAS_PAGO = ['Transferencia', 'Bizum', 'Efectivo', 'Tarjeta', 'Domiciliación']
+const empty = { concepto: '', categoria: '⛽ Gasoil', importe: 0, fecha: new Date().toISOString().split('T')[0], forma_pago: 'Transferencia', notas: '' }
 const MESES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 export default function Gastos() {
@@ -22,6 +41,7 @@ export default function Gastos() {
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState(empty)
   const [tab, setTab] = useState<'gastos' | 'beneficios'>('gastos')
+  const [filterCat, setFilterCat] = useState('todas')
   const [ventasMes, setVentasMes] = useState(0)
   const [comparativa, setComparativa] = useState<any[]>([])
 
@@ -85,7 +105,9 @@ export default function Gastos() {
     globalToast('Gasto eliminado'); load()
   }
 
+  const gastosFiltrados = filterCat === 'todas' ? gastos : gastos.filter(g => g.categoria === filterCat)
   const total = gastos.reduce((s, g) => s + Number(g.importe), 0)
+  const totalFiltrado = gastosFiltrados.reduce((s, g) => s + Number(g.importe), 0)
   const beneficioMes = ventasMes - total
   const porCategoria = CATEGORIAS.map(cat => ({
     cat, total: gastos.filter(g => g.categoria === cat).reduce((s, g) => s + Number(g.importe), 0)
@@ -143,12 +165,14 @@ export default function Gastos() {
       {tab === 'gastos' && (
         <>
           {porCategoria.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+              <button className={`btn btn-sm ${filterCat === 'todas' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterCat('todas')}>Todas ({total.toFixed(2)}€)</button>
               {porCategoria.map(x => (
-                <div key={x.cat} className="card" style={{ padding: '8px 14px', flex: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.75rem', color: 'var(--gris)', textTransform: 'uppercase' }}>{x.cat}</div>
-                  <div style={{ fontFamily: 'Fredoka One', color: '#dc2626' }}>{x.total.toFixed(2)} €</div>
-                </div>
+                <button key={x.cat} className={`btn btn-sm ${filterCat === x.cat ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterCat(filterCat === x.cat ? 'todas' : x.cat)}>
+                  {x.cat} — {x.total.toFixed(2)}€
+                </button>
               ))}
             </div>
           )}
@@ -156,19 +180,23 @@ export default function Gastos() {
           <div className="card" style={{ padding: 0 }}>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Importe</th><th></th></tr></thead>
+                <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Forma pago</th><th>Importe</th><th></th></tr></thead>
                 <tbody>
-                  {gastos.map(g => (
+                  {gastosFiltrados.map(g => (
                     <tr key={g.id}>
-                      <td>{g.fecha}</td>
-                      <td><strong>{g.concepto}</strong></td>
+                      <td style={{fontSize:'0.85rem'}}>{g.fecha}</td>
+                      <td>
+                        <strong>{g.concepto}</strong>
+                        {g.notas && <div style={{fontSize:'0.72rem',color:'var(--gris)'}}>{g.notas}</div>}
+                      </td>
                       <td><span className={`badge ${CAT_BADGE[g.categoria] || 'badge-gray'}`}>{g.categoria}</span></td>
+                      <td style={{fontSize:'0.82rem'}}>{g.forma_pago || '—'}</td>
                       <td><strong style={{ color: '#dc2626' }}>{Number(g.importe).toFixed(2)} €</strong></td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-secondary btn-sm btn-icon" onClick={() => {
                             setEditing(g)
-                            setForm({ concepto: g.concepto, categoria: g.categoria, importe: g.importe, fecha: g.fecha })
+                            setForm({ concepto: g.concepto, categoria: g.categoria, importe: g.importe, fecha: g.fecha, forma_pago: g.forma_pago || 'Transferencia', notas: g.notas || '' })
                             setOpen(true)
                           }}><Edit2 size={14} /></button>
                           <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(g.id)}><Trash2 size={14} /></button>
@@ -258,23 +286,38 @@ export default function Gastos() {
             <div className="modal-body">
               <div className="input-group">
                 <label className="input-label">Concepto *</label>
-                <input className="input" value={form.concepto} onChange={e => f('concepto', e.target.value)} />
+                <input className="input" value={form.concepto} onChange={e => f('concepto', e.target.value)}
+                  placeholder="Ej: Gasoil semana 20, Pago proveedor García..." />
               </div>
-              <div className="input-group">
-                <label className="input-label">Categoría</label>
-                <select className="select" value={form.categoria} onChange={e => f('categoria', e.target.value)}>
-                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+              <div className="form-grid-2">
+                <div className="input-group">
+                  <label className="input-label">Categoría</label>
+                  <select className="select" value={form.categoria} onChange={e => f('categoria', e.target.value)}>
+                    {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Forma de pago</label>
+                  <select className="select" value={(form as any).forma_pago} onChange={e => f('forma_pago', e.target.value)}>
+                    {FORMAS_PAGO.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="form-grid-2">
                 <div className="input-group">
                   <label className="input-label">Importe (€)</label>
-                  <input className="input" type="number" step="0.01" value={form.importe} onChange={e => f('importe', parseFloat(e.target.value) || 0)} />
+                  <input className="input" type="number" step="0.01" value={form.importe}
+                    onChange={e => f('importe', parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Fecha</label>
                   <input className="input" type="date" value={form.fecha} onChange={e => f('fecha', e.target.value)} />
                 </div>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Notas (opcional)</label>
+                <input className="input" value={(form as any).notas} onChange={e => f('notas', e.target.value)}
+                  placeholder="Ej: Factura nº 123, semanas 18-19..." />
               </div>
             </div>
             <div className="modal-footer">
