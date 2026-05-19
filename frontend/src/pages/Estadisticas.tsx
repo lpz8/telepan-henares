@@ -12,6 +12,7 @@ export default function Estadisticas() {
   const [anio] = useState(new Date().getFullYear())
   const [mesPDF, setMesPDF] = useState(String(new Date().getMonth()))
   const [kpis, setKpis] = useState({ ventas: 0, cobrado: 0, pendiente: 0, gastos: 0, beneficio: 0, clientes: 0, productos: 0, facturas: 0 })
+  const [allGastosAnio, setAllGastosAnio] = useState<any[]>([])
   const [ventasMes, setVentasMes] = useState<any[]>([])
   const [topClientes, setTopClientes] = useState<any[]>([])
   const [topProductos, setTopProductos] = useState<any[]>([])
@@ -55,6 +56,7 @@ export default function Estadisticas() {
       const allFacturas = facturas.data || []
       const allGastos = gastos.data || []
       const allPedidos = allPedidosRaw
+      setAllGastosAnio(allGastos)
 
       // Cargar precios de proveedores para calcular margen real
       const { data: provPrecios } = await supabase
@@ -179,6 +181,7 @@ export default function Estadisticas() {
 
   const tabs = [
     { id: 'resumen', label: '📊 Resumen' },
+    { id: 'resultados', label: '💰 Resultados' },
     { id: 'ventas', label: '📈 Ventas/Gastos' },
     { id: 'clientes', label: '👥 Clientes' },
     { id: 'productos', label: '📦 Productos' },
@@ -368,6 +371,77 @@ export default function Estadisticas() {
       )}
 
       {/* VENTAS/GASTOS */}
+      {/* TAB RESULTADOS — Cuadro de resultados real */}
+      {tabActiva === 'resultados' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card">
+            <h3 style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', marginBottom: 16, fontSize: '1.1rem' }}>
+              📊 Cuadro de resultados — {anio}
+            </h3>
+
+            {/* INGRESOS */}
+            <div style={{ marginBottom: 8, fontWeight: 800, color: '#16a34a', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              ➕ INGRESOS
+            </div>
+            {[
+              { label: 'Total facturado', value: kpis.ventas, color: 'var(--naranja)' },
+              { label: 'Total cobrado', value: kpis.cobrado, color: '#16a34a' },
+              { label: 'Pendiente de cobro', value: kpis.pendiente, color: '#f59e0b' },
+            ].map(r => (
+              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f5e8d8', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.9rem', color: '#444' }}>{r.label}</span>
+                <span style={{ fontFamily: 'Fredoka One', fontSize: '1.1rem', color: r.color }}>{r.value.toFixed(2)} €</span>
+              </div>
+            ))}
+
+            {/* GASTOS */}
+            <div style={{ margin: '16px 0 8px', fontWeight: 800, color: '#dc2626', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              ➖ GASTOS
+            </div>
+            {[
+              { label: '🚛 Pagos a proveedores', value: allGastosAnio.filter((g:any) => g.categoria === '🚛 Proveedor').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '⛽ Gasoil', value: allGastosAnio.filter((g:any) => g.categoria === '⛽ Gasoil').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '👤 Autónomo/Seguro Social', value: allGastosAnio.filter((g:any) => g.categoria === '👤 Autónomo/Seguro Social').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '🔧 Mantenimiento/Averías', value: allGastosAnio.filter((g:any) => g.categoria === '🔧 Mantenimiento/Averías').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '📱 Teléfono/Internet', value: allGastosAnio.filter((g:any) => g.categoria === '📱 Teléfono/Internet').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '🏛️ Seguros', value: allGastosAnio.filter((g:any) => g.categoria === '🏛️ Seguros').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '🏠 Alquiler', value: allGastosAnio.filter((g:any) => g.categoria === '🏠 Alquiler').reduce((s:number,g:any) => s+Number(g.importe),0) },
+              { label: '📦 Otros gastos', value: allGastosAnio.filter((g:any) => !['🚛 Proveedor','⛽ Gasoil','👤 Autónomo/Seguro Social','🔧 Mantenimiento/Averías','📱 Teléfono/Internet','🏛️ Seguros','🏠 Alquiler'].includes(g.categoria)).reduce((s:number,g:any) => s+Number(g.importe),0) },
+            ].filter(r => r.value > 0).map(r => (
+              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f5e8d8', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.9rem', color: '#444' }}>{r.label}</span>
+                <span style={{ fontFamily: 'Fredoka One', fontSize: '1.1rem', color: '#dc2626' }}>-{r.value.toFixed(2)} €</span>
+              </div>
+            ))}
+
+            {/* TOTAL GASTOS */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '2px solid #dc2626', alignItems: 'center', background: '#fef2f2' }}>
+              <span style={{ fontWeight: 800 }}>Total gastos</span>
+              <span style={{ fontFamily: 'Fredoka One', fontSize: '1.1rem', color: '#dc2626' }}>-{kpis.gastos.toFixed(2)} €</span>
+            </div>
+
+            {/* RESULTADO FINAL */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 14px', alignItems: 'center', background: kpis.beneficio >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0 0 12px 12px', marginTop: 4 }}>
+              <span style={{ fontWeight: 900, fontSize: '1.1rem' }}>
+                {kpis.beneficio >= 0 ? '✅ BENEFICIO NETO' : '❌ PÉRDIDA NETA'}
+              </span>
+              <span style={{ fontFamily: 'Fredoka One', fontSize: '1.6rem', color: kpis.beneficio >= 0 ? '#16a34a' : '#dc2626' }}>
+                {kpis.beneficio >= 0 ? '+' : ''}{kpis.beneficio.toFixed(2)} €
+              </span>
+            </div>
+
+            {/* MARGEN */}
+            {kpis.ventas > 0 && (
+              <div style={{ textAlign: 'center', marginTop: 12, color: 'var(--gris)', fontSize: '0.85rem' }}>
+                Margen sobre ventas: <strong style={{ color: kpis.beneficio >= 0 ? '#16a34a' : '#dc2626' }}>
+                  {((kpis.beneficio / kpis.ventas) * 100).toFixed(1)}%
+                </strong>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {tabActiva === 'ventas' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="card">
