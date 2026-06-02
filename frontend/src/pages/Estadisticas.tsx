@@ -27,6 +27,30 @@ export default function Estadisticas() {
   const [tabActiva, setTabActiva] = useState('resumen')
   const [gastosList, setGastosList] = useState<any[]>([])
   const [editandoGasto, setEditandoGasto] = useState<any>(null)
+
+  const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+  const loadProdMes = async (mes: string) => {
+    const { data } = await supabase
+      .from('pedidos')
+      .select('cantidad, precio, iva, productos(nombre)')
+      .gte('fecha', `${mes}-01`)
+      .lte('fecha', `${mes}-31`)
+    const map: Record<string, { nombre: string, unidades: number, total: number, conIva: number }> = {}
+    ;(data || []).forEach((p: any) => {
+      const nombre = p.productos?.nombre || 'Sin nombre'
+      if (!map[nombre]) map[nombre] = { nombre, unidades: 0, total: 0, conIva: 0 }
+      const qty = Number(p.cantidad)
+      const precio = Number(p.precio || 0)
+      const iva = Number(p.iva || 4)
+      map[nombre].unidades += qty
+      map[nombre].total += qty * precio
+      map[nombre].conIva += qty * precio * (1 + iva / 100)
+    })
+    setProdMes(Object.values(map).sort((a, b) => b.unidades - a.unidades))
+  }
+
+  useEffect(() => { loadProdMes(mesProd) }, [mesProd])
   const [formGasto, setFormGasto] = useState({ concepto: '', categoria: 'General', importe: 0, fecha: '' })
 
   useEffect(() => {
@@ -197,32 +221,6 @@ export default function Estadisticas() {
     { id: 'cobros', label: '💰 Cobros' },
     { id: 'gastos_detalle', label: '✏️ Editar Gastos' },
   ]
-
-  const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-  const loadProdMes = async (mes: string) => {
-    const { data } = await supabase
-      .from('pedidos')
-      .select('cantidad, precio, iva, productos(nombre)')
-      .gte('fecha', `${mes}-01`)
-      .lte('fecha', `${mes}-31`)
-
-    const map: Record<string, { nombre: string, unidades: number, total: number, conIva: number }> = {}
-    ;(data || []).forEach((p: any) => {
-      const nombre = p.productos?.nombre || 'Sin nombre'
-      if (!map[nombre]) map[nombre] = { nombre, unidades: 0, total: 0, conIva: 0 }
-      const qty = Number(p.cantidad)
-      const precio = Number(p.precio || 0)
-      const iva = Number(p.iva || 4)
-      map[nombre].unidades += qty
-      map[nombre].total += qty * precio
-      map[nombre].conIva += qty * precio * (1 + iva / 100)
-    })
-    const sorted = Object.values(map).sort((a, b) => b.unidades - a.unidades)
-    setProdMes(sorted)
-  }
-
-  useEffect(() => { loadProdMes(mesProd) }, [mesProd])
 
   const generarInformePDF = async () => {
     const mesNum = String(parseInt(mesPDF) + 1).padStart(2,'0')
