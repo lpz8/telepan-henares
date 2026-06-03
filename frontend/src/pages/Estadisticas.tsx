@@ -30,10 +30,16 @@ export default function Estadisticas() {
 
   const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
+  const lastDay = (mes: string) => {
+    const [y, m] = mes.split('-').map(Number)
+    return new Date(y, m, 0).getDate()
+  }
+
   const loadProdMes = async (mes: string) => {
+    const fin = `${mes}-${String(lastDay(mes)).padStart(2,'0')}`
     const [pedData, preciosData] = await Promise.all([
       supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)')
-        .gte('fecha', `${mes}-01`).lte('fecha', `${mes}-31`),
+        .gte('fecha', `${mes}-01`).lte('fecha', fin),
       supabase.from('precios_proveedor').select('articulo, precio_cliente, precio_pvp')
     ])
 
@@ -275,10 +281,10 @@ export default function Estadisticas() {
 
     const [factsMes, pedMes, gastosMes, deudoresMes, otrosIngresosMes] = await Promise.all([
       supabase.from('facturas').select('*, clientes(nombre, forma_pago)').eq('mes', mesKey),
-      supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-31`),
-      supabase.from('gastos').select('concepto, categoria, importe, fecha, notas').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-31`),
+      supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-${String(new Date(parseInt(mesKey.split('-')[0]), parseInt(mesKey.split('-')[1]), 0).getDate()).padStart(2,'0')}`),
+      supabase.from('gastos').select('concepto, categoria, importe, fecha, notas').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-${String(new Date(parseInt(mesKey.split('-')[0]), parseInt(mesKey.split('-')[1]), 0).getDate()).padStart(2,'0')}`),
       supabase.from('facturas').select('total, clientes(nombre)').eq('mes', mesKey).eq('pagado', false),
-      supabase.from('otros_ingresos').select('concepto, categoria, importe, fecha').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-31`),
+      supabase.from('otros_ingresos').select('concepto, categoria, importe, fecha').gte('fecha', `${mesKey}-01`).lte('fecha', `${mesKey}-${String(new Date(parseInt(mesKey.split('-')[0]), parseInt(mesKey.split('-')[1]), 0).getDate()).padStart(2,'0')}`),
     ])
 
     const facts = factsMes.data || []
@@ -451,20 +457,24 @@ export default function Estadisticas() {
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Ventas Totales', value: `${kpis.ventas.toFixed(2)} €`, icon: TrendingUp, color: '#E8670A', bg: '#fff3e8' },
-              { label: 'Cobrado', value: `${kpis.cobrado.toFixed(2)} €`, icon: CheckCircle, color: '#16a34a', bg: '#f0fdf4' },
-              { label: 'Pendiente cobro', value: `${kpis.pendiente.toFixed(2)} €`, icon: Clock, color: '#dc2626', bg: '#fef2f2' },
-              { label: 'Gastos', value: `${kpis.gastos.toFixed(2)} €`, icon: TrendingDown, color: '#7c3aed', bg: '#f5f3ff' },
-              { label: 'Beneficio neto', value: `${kpis.beneficio.toFixed(2)} €`, icon: kpis.beneficio >= 0 ? TrendingUp : TrendingDown, color: kpis.beneficio >= 0 ? '#16a34a' : '#dc2626', bg: kpis.beneficio >= 0 ? '#f0fdf4' : '#fef2f2' },
-              { label: 'Clientes activos', value: kpis.clientes, icon: Users, color: '#2563eb', bg: '#eff6ff' },
-              { label: 'Productos', value: kpis.productos, icon: Package, color: '#ca8a04', bg: '#fefce8' },
-              { label: 'Facturas', value: kpis.facturas, icon: CheckCircle, color: '#0891b2', bg: '#f0f9ff' },
+              { label: 'Ventas Totales', value: `${kpis.ventas.toFixed(2)} €`, icon: TrendingUp, color: '#E8670A', bg: '#fff3e8', tab: 'ventas' },
+              { label: 'Cobrado', value: `${kpis.cobrado.toFixed(2)} €`, icon: CheckCircle, color: '#16a34a', bg: '#f0fdf4', tab: 'cobros' },
+              { label: 'Pendiente cobro', value: `${kpis.pendiente.toFixed(2)} €`, icon: Clock, color: '#dc2626', bg: '#fef2f2', tab: 'cobros' },
+              { label: 'Gastos', value: `${kpis.gastos.toFixed(2)} €`, icon: TrendingDown, color: '#7c3aed', bg: '#f5f3ff', tab: 'gastos_detalle' },
+              { label: 'Beneficio neto', value: `${kpis.beneficio.toFixed(2)} €`, icon: kpis.beneficio >= 0 ? TrendingUp : TrendingDown, color: kpis.beneficio >= 0 ? '#16a34a' : '#dc2626', bg: kpis.beneficio >= 0 ? '#f0fdf4' : '#fef2f2', tab: 'resultados' },
+              { label: 'Clientes activos', value: kpis.clientes, icon: Users, color: '#2563eb', bg: '#eff6ff', tab: 'clientes' },
+              { label: 'Productos', value: kpis.productos, icon: Package, color: '#ca8a04', bg: '#fefce8', tab: 'productos' },
+              { label: 'Facturas', value: kpis.facturas, icon: CheckCircle, color: '#0891b2', bg: '#f0f9ff', tab: 'ventas' },
             ].map(s => (
-              <div key={s.label} className="stat-card">
+              <div key={s.label} className="stat-card" onClick={() => setTabActiva(s.tab)}
+                style={{ cursor: 'pointer', transition: 'transform 0.15s', userSelect: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
                 <div className="stat-icon" style={{ background: s.bg }}><s.icon size={20} color={s.color} /></div>
                 <div>
                   <div className="stat-value" style={{ color: s.color, fontSize: '1.2rem' }}>{s.value}</div>
                   <div className="stat-label">{s.label}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--gris)', marginTop: 2 }}>👆 Ver detalle</div>
                 </div>
               </div>
             ))}
