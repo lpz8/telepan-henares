@@ -183,17 +183,18 @@ export default function Estadisticas() {
 
     const map: Record<string, {
       nombre: string, unidades: number, total: number, conIva: number,
-      precioProveedor: number, costeTotal: number, esGrupo: boolean, productos: string[]
+      precioProveedor: number, costeTotal: number, esGrupo: boolean, productos: string[], categoria: string
     }> = {}
 
     allPeds.forEach((p: any) => {
       const nombreReal = p.productos?.nombre || 'Sin nombre'
+      const categoria = (p.productos?.categoria || 'Otros') as string
       const grupo = getGrupo(nombreReal)
       const esGrupo = grupo !== nombreReal
 
       if (!map[grupo]) map[grupo] = {
         nombre: grupo, unidades: 0, total: 0, conIva: 0,
-        precioProveedor: 0, costeTotal: 0, esGrupo, productos: []
+        precioProveedor: 0, costeTotal: 0, esGrupo, productos: [], categoria
       }
 
       const qty = Number(p.cantidad)
@@ -870,26 +871,23 @@ export default function Estadisticas() {
             </div>
           )}
 
-          {/* Pestañas por tipo de producto */}
+          {/* Pestañas por CATEGORÍA de producto */}
           {prodMes.length > 0 && (
             <div>
-              <div className="tabs" style={{ marginBottom: 0 }}>
+              <div className="tabs" style={{ marginBottom: 0, flexWrap: 'wrap' }}>
                 <div className={`tab ${tipoProd === 'todos' ? 'active' : ''}`} onClick={() => setTipoProd('todos')}>
                   📦 Todos ({prodMes.reduce((s: number, p: any) => s+p.unidades, 0)})
                 </div>
-                {['🏠 BARRAS — CASA + PISTOLA', '🥖 ARTESANA (todas)', '🥨 PICOS (todos)'].map(grupo => {
-                  const found = prodMes.find((p: any) => p.nombre === grupo)
-                  if (!found) return null
+                {['Pan','Bollería','Pastelería','Huevos','Otros'].map(cat => {
+                  const total = prodMes.filter((p: any) => p.categoria === cat).reduce((s: number, p: any) => s+p.unidades, 0)
+                  if (total === 0) return null
+                  const emoji = cat === 'Pan' ? '🍞' : cat === 'Bollería' ? '🥐' : cat === 'Pastelería' ? '🎂' : cat === 'Huevos' ? '🥚' : '📦'
                   return (
-                    <div key={grupo} className={`tab ${tipoProd === grupo ? 'active' : ''}`}
-                      onClick={() => setTipoProd(grupo)}>
-                      {grupo.split(' ')[0]} ({found.unidades})
+                    <div key={cat} className={`tab ${tipoProd === cat ? 'active' : ''}`} onClick={() => setTipoProd(cat)}>
+                      {emoji} {cat} ({total})
                     </div>
                   )
                 })}
-                <div className={`tab ${tipoProd === 'otros' ? 'active' : ''}`} onClick={() => setTipoProd('otros')}>
-                  🔹 Resto ({prodMes.filter((p: any) => !p.esGrupo).reduce((s: number, p: any) => s+p.unidades, 0)})
-                </div>
               </div>
 
               {/* Tabla desglose */}
@@ -899,7 +897,7 @@ export default function Estadisticas() {
                     🧾 Desglose para cotejar — {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>
-                    {prodMesFiltrado.filter((p: any) => tipoProd === 'todos' || (tipoProd === 'otros' ? !p.esGrupo : p.nombre === tipoProd)).length} líneas
+                    {prodMesFiltrado.filter((p: any) => tipoProd === 'todos' ? true : p.categoria === tipoProd).length} líneas
                   </span>
                 </div>
                 <div className="table-wrap">
@@ -920,8 +918,7 @@ export default function Estadisticas() {
                       {prodMesFiltrado
                         .filter((p: any) =>
                           tipoProd === 'todos' ? true :
-                          tipoProd === 'otros' ? !p.esGrupo :
-                          p.nombre === tipoProd
+                          p.categoria === tipoProd
                         )
                         .map((p: any, i: number) => {
                           const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
@@ -971,19 +968,19 @@ export default function Estadisticas() {
                       <tr style={{ background: '#5a2d0c', color: 'white' }}>
                         <td colSpan={2} style={{ fontFamily: 'Fredoka One', padding: '10px' }}>TOTALES</td>
                         <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.unidades, 0)} ud
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.unidades, 0)} ud
                         </td>
                         <td></td>
                         <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)} €
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)} €
                         </td>
                         <td></td>
                         <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)} €
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)} €
                         </td>
                         <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
                           {(() => {
-                            const fil = prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd)
+                            const fil = prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd)
                             const m = fil.reduce((s: number, p: any) => s+p.conIva, 0) - fil.reduce((s: number, p: any) => s+p.costeTotal, 0)
                             return m !== 0 ? `${m>0?'+':''}${m.toFixed(2)} €` : '—'
                           })()}
