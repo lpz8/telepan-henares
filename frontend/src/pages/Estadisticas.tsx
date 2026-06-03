@@ -53,6 +53,7 @@ export default function Estadisticas() {
       const n = (nombre || '').toUpperCase()
       if (n.includes('CASA') || n.includes('PISTOLA')) return '🏠 BARRAS — CASA + PISTOLA'
       if (n.includes('ARTESANA')) return '🥖 ARTESANA (todas)'
+      if (n.startsWith('PICOS') || n.includes('PICOS')) return '🥨 PICOS (todos)'
       return nombre
     }
 
