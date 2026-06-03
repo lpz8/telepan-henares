@@ -13,6 +13,112 @@ export default function Estadisticas() {
   const [mesPDF, setMesPDF] = useState(String(new Date().getMonth()))
   const [mesProd, setMesProd] = useState(new Date().toISOString().slice(0,7))
   const [prodMes, setProdMes] = useState<any[]>([])
+  const [busqProd, setBusqProd] = useState('')
+  const [tipoProd, setTipoProd] = useState('todos')
+
+  const prodMesFiltrado = busqProd.trim()
+    ? prodMes.filter(p => p.nombre.toLowerCase().includes(busqProd.toLowerCase()))
+    : prodMes
+
+  const buildProdHTML = () => {
+    const mesLabel = MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]
+    const anioLabel = mesProd.split('-')[0]
+    const rows = prodMesFiltrado.map((p: any, i: number) => {
+      const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
+      const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
+      return `<tr style="background:${p.esGrupo?'#fff8f0':i%2===0?'white':'#fffaf6'}">
+        <td>${i+1}</td>
+        <td><strong>${p.nombre}</strong>${p.esGrupo && p.productos?.length ? `<br><small style="color:#888">${p.productos.join(' · ')}</small>` : ''}</td>
+        <td style="text-align:right"><strong>${p.unidades} ud</strong></td>
+        <td style="text-align:right">${precioUnit.toFixed(4)} €</td>
+        <td style="text-align:right;color:#E8670A;font-weight:700">${p.conIva.toFixed(2)} €</td>
+        <td style="text-align:right;color:#dc2626">${p.costeTotal>0?p.precioProveedor.toFixed(4)+' €':'—'}</td>
+        <td style="text-align:right;font-weight:700;color:#dc2626">${p.costeTotal>0?p.costeTotal.toFixed(2)+' €':'—'}</td>
+        <td style="text-align:right;font-weight:700;color:${margen!==null?(margen>=0?'#16a34a':'#dc2626'):'#ccc'}">${margen!==null?(margen>=0?'+':'')+margen.toFixed(2)+' €':'—'}</td>
+      </tr>`
+    }).join('')
+    const tot = prodMesFiltrado
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Productos ${mesLabel} ${anioLabel} — TelePan</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:32px 40px;color:#1a1a1a;font-size:12px}
+      h1{color:#E8670A;margin-bottom:4px;font-size:1.4rem}
+      .sub{color:#888;font-size:0.8rem;margin-bottom:16px}
+      .kpis{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+      .kpi{border:1.5px solid #f5e8d8;border-radius:8px;padding:10px 14px;text-align:center;min-width:120px}
+      .kpi-val{font-size:1.1rem;font-weight:900;color:#E8670A}
+      .kpi-lbl{font-size:0.65rem;color:#888;text-transform:uppercase;font-weight:700}
+      table{width:100%;border-collapse:collapse;font-size:0.82rem}
+      th{background:#E8670A;color:white;padding:7px 9px;text-align:left;font-size:0.7rem;text-transform:uppercase}
+      td{padding:6px 9px;border-bottom:1px solid #f5e0c5}
+      tfoot tr{background:#5a2d0c;color:white;font-weight:900}
+      @media print{body{padding:20px 28px}}
+    </style></head><body>
+    <h1>📦 Desglose de productos — ${mesLabel} ${anioLabel}</h1>
+    <div class="sub">TelePan Henares · Para cotejar con la panificadora · ${new Date().toLocaleDateString('es-ES')}</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-val">${tot.reduce((s:number,p:any)=>s+p.unidades,0)}</div><div class="kpi-lbl">Unidades</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#16a34a">${tot.reduce((s:number,p:any)=>s+p.conIva,0).toFixed(2)} €</div><div class="kpi-lbl">Ventas c/IVA</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#dc2626">${tot.reduce((s:number,p:any)=>s+p.costeTotal,0).toFixed(2)} €</div><div class="kpi-lbl">Coste prov.</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#7c3aed">${(tot.reduce((s:number,p:any)=>s+p.conIva,0)-tot.reduce((s:number,p:any)=>s+p.costeTotal,0)).toFixed(2)} €</div><div class="kpi-lbl">Margen</div></div>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Producto</th><th>Uds</th><th>P.Unit</th><th>Venta c/IVA</th><th>Coste unit</th><th>Total coste</th><th>Margen</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="2">TOTALES</td>
+        <td>${tot.reduce((s:number,p:any)=>s+p.unidades,0)} ud</td>
+        <td></td>
+        <td>${tot.reduce((s:number,p:any)=>s+p.conIva,0).toFixed(2)} €</td>
+        <td></td>
+        <td>${tot.reduce((s:number,p:any)=>s+p.costeTotal,0).toFixed(2)} €</td>
+        <td>${(()=>{const m=tot.reduce((s:number,p:any)=>s+p.conIva,0)-tot.reduce((s:number,p:any)=>s+p.costeTotal,0);return m>0?'+'+m.toFixed(2):m.toFixed(2)})() + ' €'}</td>
+      </tr></tfoot>
+    </table>
+    </body></html>`
+  }
+
+  const descargarProdPDF = async () => {
+    const html = buildProdHTML()
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write(html); w.document.close()
+    setTimeout(() => { w.print(); globalToast('💡 Selecciona "Guardar como PDF" en el diálogo') }, 800)
+  }
+
+  const descargarProdJPG = async () => {
+    globalToast('⏳ Generando imagen...')
+    try {
+      if (!(window as any).html2canvas) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+          s.onload = () => resolve(); s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const h2c = (window as any).html2canvas
+      const html = buildProdHTML()
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;height:1200px;border:none'
+      document.body.appendChild(iframe)
+      await new Promise<void>(resolve => { iframe.onload = () => resolve(); iframe.src = blobUrl })
+      if (iframe.contentWindow) (iframe.contentWindow as any).print = () => {}
+      await new Promise(r => setTimeout(r, 1200))
+      const canvas = await h2c(iframe.contentDocument!.body, {
+        scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: 900
+      })
+      document.body.removeChild(iframe); URL.revokeObjectURL(blobUrl)
+      const mesLabel = MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/jpeg', 0.95)
+      a.download = `Productos_${mesLabel}_${mesProd.split('-')[0]}.jpg`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      globalToast('✅ JPG descargado')
+    } catch(err: any) { globalToast('Error: ' + err.message, 'error') }
+  }
   const [kpis, setKpis] = useState({ ventas: 0, cobrado: 0, pendiente: 0, gastos: 0, beneficio: 0, clientes: 0, productos: 0, facturas: 0 })
   const [allGastosAnio, setAllGastosAnio] = useState<any[]>([])
   const [totalOtrosIngresos, setTotalOtrosIngresos] = useState(0)
@@ -725,160 +831,176 @@ export default function Estadisticas() {
       {tabActiva === 'productos' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Selector de mes */}
+          {/* Cabecera con selector mes, buscador y botones descarga */}
           <div className="card" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', fontSize: '1rem' }}>📦 Desglose por mes:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>📦 Mes:</span>
               <input type="month" className="input" style={{ width: 'auto' }}
                 value={mesProd} onChange={e => setMesProd(e.target.value)} />
-              <span style={{ color: 'var(--gris)', fontSize: '0.85rem' }}>
-                {prodMes.length} productos · {prodMes.reduce((s,p)=>s+p.unidades,0)} unidades totales
-              </span>
+              <input className="input" style={{ flex: 1, minWidth: 180 }}
+                placeholder="🔍 Buscar producto..."
+                value={busqProd} onChange={e => setBusqProd(e.target.value)} />
+              <button className="btn btn-secondary btn-sm" onClick={() => descargarProdPDF()}
+                title="Descargar PDF">⬇️ PDF</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => descargarProdJPG()}
+                title="Descargar JPG">⬇️ JPG</button>
             </div>
+            {prodMes.length > 0 && (
+              <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--gris)' }}>
+                {prodMesFiltrado.length} productos · {prodMesFiltrado.reduce((s: number, p: any) => s + p.unidades, 0)} unidades · {prodMesFiltrado.reduce((s: number, p: any) => s + p.conIva, 0).toFixed(2)} €
+              </div>
+            )}
           </div>
 
           {/* KPIs del mes */}
           {prodMes.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
               {[
-                { label: '🍞 Total unidades', value: prodMes.reduce((s,p)=>s+p.unidades,0).toString(), color: '#2563eb', bg: '#eff6ff' },
-                { label: '💰 Total sin IVA', value: prodMes.reduce((s,p)=>s+p.total,0).toFixed(2)+' €', color: 'var(--naranja)', bg: '#fff8f0' },
-                { label: '💳 Total con IVA', value: prodMes.reduce((s,p)=>s+p.conIva,0).toFixed(2)+' €', color: '#16a34a', bg: '#f0fdf4' },
-                { label: '📊 Productos distintos', value: prodMes.length.toString(), color: '#7c3aed', bg: '#f5f3ff' },
+                { label: '🍞 Total unidades', value: prodMes.reduce((s: number, p: any) => s+p.unidades, 0).toString(), color: '#2563eb', bg: '#eff6ff' },
+                { label: '💰 Total sin IVA', value: prodMes.reduce((s: number, p: any) => s+p.total, 0).toFixed(2)+' €', color: 'var(--naranja)', bg: '#fff8f0' },
+                { label: '💳 Total con IVA', value: prodMes.reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)+' €', color: '#16a34a', bg: '#f0fdf4' },
+                { label: '🏭 Coste proveedor', value: prodMes.reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)+' €', color: '#dc2626', bg: '#fef2f2' },
+                { label: '📊 Margen bruto', value: (prodMes.reduce((s: number, p: any) => s+p.conIva, 0) - prodMes.reduce((s: number, p: any) => s+p.costeTotal, 0)).toFixed(2)+' €', color: '#7c3aed', bg: '#f5f3ff' },
               ].map(k => (
                 <div key={k.label} className="card" style={{ padding: '12px', background: k.bg, textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Fredoka One', fontSize: '1.25rem', color: k.color }}>{k.value}</div>
+                  <div style={{ fontFamily: 'Fredoka One', fontSize: '1.2rem', color: k.color }}>{k.value}</div>
                   <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--gris)', textTransform: 'uppercase', marginTop: 2 }}>{k.label}</div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Gráfica barras */}
+          {/* Pestañas por tipo de producto */}
           {prodMes.length > 0 && (
-            <div className="card">
-              <h3 style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', marginBottom: 14 }}>
-                📊 Unidades por producto — {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
-              </h3>
-              <ResponsiveContainer width="100%" height={Math.max(250, prodMes.length * 32)}>
-                <BarChart data={prodMes} layout="vertical" margin={{ left: 10, right: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f5e8d8" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="nombre" width={160} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: string) => [
-                    name === 'unidades' ? `${v} ud` : `${Number(v).toFixed(2)} €`, name
-                  ]} />
-                  <Legend />
-                  <Bar dataKey="unidades" fill="#2563eb" radius={[0,4,4,0]} name="Unidades" />
-                  <Bar dataKey="total" fill="#E8670A" radius={[0,4,4,0]} name="Sin IVA (€)" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div>
+              <div className="tabs" style={{ marginBottom: 0 }}>
+                <div className={`tab ${tipoProd === 'todos' ? 'active' : ''}`} onClick={() => setTipoProd('todos')}>
+                  📦 Todos ({prodMes.reduce((s: number, p: any) => s+p.unidades, 0)})
+                </div>
+                {['🏠 BARRAS — CASA + PISTOLA', '🥖 ARTESANA (todas)', '🥨 PICOS (todos)'].map(grupo => {
+                  const found = prodMes.find((p: any) => p.nombre === grupo)
+                  if (!found) return null
+                  return (
+                    <div key={grupo} className={`tab ${tipoProd === grupo ? 'active' : ''}`}
+                      onClick={() => setTipoProd(grupo)}>
+                      {grupo.split(' ')[0]} ({found.unidades})
+                    </div>
+                  )
+                })}
+                <div className={`tab ${tipoProd === 'otros' ? 'active' : ''}`} onClick={() => setTipoProd('otros')}>
+                  🔹 Resto ({prodMes.filter((p: any) => !p.esGrupo).reduce((s: number, p: any) => s+p.unidades, 0)})
+                </div>
+              </div>
+
+              {/* Tabla desglose */}
+              <div id="tabla-productos-pdf" className="card" style={{ padding: 0, borderRadius: '0 0 12px 12px' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>
+                    🧾 Desglose para cotejar — {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>
+                    {prodMesFiltrado.filter((p: any) => tipoProd === 'todos' || (tipoProd === 'otros' ? !p.esGrupo : p.nombre === tipoProd)).length} líneas
+                  </span>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Producto</th>
+                        <th style={{ textAlign: 'right' }}>Uds</th>
+                        <th style={{ textAlign: 'right' }}>Precio venta</th>
+                        <th style={{ textAlign: 'right' }}>Total c/IVA</th>
+                        <th style={{ textAlign: 'right' }}>Coste prov.</th>
+                        <th style={{ textAlign: 'right' }}>Total coste</th>
+                        <th style={{ textAlign: 'right' }}>Margen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prodMesFiltrado
+                        .filter((p: any) =>
+                          tipoProd === 'todos' ? true :
+                          tipoProd === 'otros' ? !p.esGrupo :
+                          p.nombre === tipoProd
+                        )
+                        .map((p: any, i: number) => {
+                          const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
+                          const totalProd = prodMesFiltrado.reduce((s: number, x: any) => s + x.unidades, 0)
+                          const pct = totalProd > 0 ? (p.unidades / totalProd * 100).toFixed(1) : '0'
+                          const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
+                          const margenPct = margen !== null && p.costeTotal > 0 ? (margen / p.costeTotal * 100).toFixed(1) : null
+                          return (
+                            <tr key={i} style={{ background: p.esGrupo ? '#fff8f0' : i%2===0 ? 'white' : '#fffaf6' }}>
+                              <td style={{ fontFamily: 'Fredoka One', color: i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#cd7c2f':'var(--gris)' }}>
+                                {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+                              </td>
+                              <td>
+                                <div style={{ fontWeight: 700, color: p.esGrupo ? 'var(--naranja)' : 'inherit' }}>{p.nombre}</div>
+                                {p.esGrupo && p.productos?.length > 0 && (
+                                  <div style={{ fontSize: '0.68rem', color: 'var(--gris)' }}>{p.productos.join(' · ')}</div>
+                                )}
+                                <div style={{ height: 3, background: '#f5e8d8', borderRadius: 2, marginTop: 3 }}>
+                                  <div style={{ height: 3, background: p.esGrupo ? '#E8670A' : '#2563eb', borderRadius: 2, width: `${pct}%` }} />
+                                </div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--gris)' }}>{pct}%</div>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <span style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>{p.unidades} ud</span>
+                              </td>
+                              <td style={{ textAlign: 'right', color: 'var(--gris)', fontSize: '0.82rem' }}>{precioUnit.toFixed(4)} €</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--naranja)' }}>{p.conIva.toFixed(2)} €</td>
+                              <td style={{ textAlign: 'right', fontSize: '0.82rem', color: p.costeTotal>0 ? '#dc2626' : '#ccc' }}>
+                                {p.costeTotal>0 ? `${p.precioProveedor.toFixed(4)} €` : '—'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: p.costeTotal>0 ? '#dc2626' : '#ccc' }}>
+                                {p.costeTotal>0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                {margen !== null ? (
+                                  <span style={{ fontWeight: 800, color: margen>=0?'#16a34a':'#dc2626', fontSize: '0.82rem' }}>
+                                    {margen>=0?'+':''}{margen.toFixed(2)}€<br/>
+                                    <span style={{ fontSize: '0.7rem' }}>({margenPct}%)</span>
+                                  </span>
+                                ) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#5a2d0c', color: 'white' }}>
+                        <td colSpan={2} style={{ fontFamily: 'Fredoka One', padding: '10px' }}>TOTALES</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.unidades, 0)} ud
+                        </td>
+                        <td></td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)} €
+                        </td>
+                        <td></td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
+                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd).reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)} €
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
+                          {(() => {
+                            const fil = prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:tipoProd==='otros'?!p.esGrupo:p.nombre===tipoProd)
+                            const m = fil.reduce((s: number, p: any) => s+p.conIva, 0) - fil.reduce((s: number, p: any) => s+p.costeTotal, 0)
+                            return m !== 0 ? `${m>0?'+':''}${m.toFixed(2)} €` : '—'
+                          })()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Tabla completa para cotejar con panificadora */}
-          {prodMes.length > 0 ? (
-            <div className="card" style={{ padding: 0 }}>
-              <div style={{ padding: '14px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)', fontSize: '1rem' }}>
-                  🧾 Desglose completo — Para cotejar con la panificadora
-                </span>
-                <span style={{ fontSize: '0.78rem', color: 'var(--gris)', fontStyle: 'italic' }}>
-                  {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
-                </span>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 36 }}>#</th>
-                      <th>Producto</th>
-                      <th style={{ textAlign: 'right' }}>Uds</th>
-                      <th style={{ textAlign: 'right' }}>Precio venta</th>
-                      <th style={{ textAlign: 'right' }}>Total venta</th>
-                      <th style={{ textAlign: 'right' }}>Coste prov.</th>
-                      <th style={{ textAlign: 'right' }}>Total coste</th>
-                      <th style={{ textAlign: 'right' }}>Margen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prodMes.map((p: any, i: number) => {
-                      const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
-                      const pctTotal = prodMes.reduce((s: number, x: any) => s + x.unidades, 0) > 0
-                        ? (p.unidades / prodMes.reduce((s: number, x: any) => s + x.unidades, 0) * 100).toFixed(1) : '0'
-                      const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
-                      const margenPct = margen !== null && p.costeTotal > 0 ? ((margen / p.costeTotal) * 100).toFixed(1) : null
-                      return (
-                        <tr key={i} style={{ background: p.esGrupo ? '#fff8f0' : i % 2 === 0 ? 'white' : '#fffaf6' }}>
-                          <td>
-                            <span style={{ fontFamily: 'Fredoka One', fontSize: '0.9rem', color: i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : i === 2 ? '#cd7c2f' : 'var(--gris)' }}>
-                              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 700, color: p.esGrupo ? 'var(--naranja)' : 'inherit' }}>{p.nombre}</div>
-                            {p.esGrupo && p.productos?.length > 0 && (
-                              <div style={{ fontSize: '0.68rem', color: 'var(--gris)', marginTop: 2 }}>
-                                {p.productos.join(' · ')}
-                              </div>
-                            )}
-                            <div style={{ height: 3, background: '#f5e8d8', borderRadius: 2, marginTop: 3, width: '100%' }}>
-                              <div style={{ height: 3, background: p.esGrupo ? '#E8670A' : '#2563eb', borderRadius: 2, width: `${pctTotal}%` }} />
-                            </div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--gris)', marginTop: 1 }}>{pctTotal}%</div>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <span style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
-                              {p.unidades} ud
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right', color: 'var(--gris)', fontSize: '0.85rem' }}>
-                            {precioUnit.toFixed(4)} €
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--naranja)' }}>
-                            {p.conIva.toFixed(2)} €
-                          </td>
-                          <td style={{ textAlign: 'right', fontSize: '0.85rem', color: p.costeTotal > 0 ? '#dc2626' : '#ccc' }}>
-                            {p.costeTotal > 0 ? `${p.precioProveedor.toFixed(4)} €` : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: p.costeTotal > 0 ? '#dc2626' : '#ccc' }}>
-                            {p.costeTotal > 0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            {margen !== null ? (
-                              <span style={{ fontWeight: 800, color: margen >= 0 ? '#16a34a' : '#dc2626', fontSize: '0.85rem' }}>
-                                {margen >= 0 ? '+' : ''}{margen.toFixed(2)}€<br/>
-                                <span style={{ fontSize: '0.7rem' }}>({margenPct}%)</span>
-                              </span>
-                            ) : <span style={{ color: '#ccc', fontSize: '0.78rem' }}>Sin precio prov.</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#5a2d0c', color: 'white' }}>
-                      <td colSpan={2} style={{ fontFamily: 'Fredoka One', padding: '10px 10px' }}>TOTALES</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.unidades, 0)} ud</td>
-                      <td></td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.conIva, 0).toFixed(2)} €</td>
-                      <td></td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.costeTotal, 0).toFixed(2)} €</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                        {(() => { const m = prodMes.reduce((s: number, p: any) => s + p.conIva, 0) - prodMes.reduce((s: number, p: any) => s + p.costeTotal, 0); return m > 0 ? `+${m.toFixed(2)} €` : `${m.toFixed(2)} €` })()}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="card">
-              <div className="empty-state">
-                <span style={{ fontSize: 40 }}>📦</span>
-                <p>No hay pedidos en {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}</p>
-              </div>
-            </div>
+          {prodMes.length === 0 && (
+            <div className="card"><div className="empty-state">
+              <span style={{ fontSize: 40 }}>📦</span>
+              <p>No hay pedidos en {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}</p>
+            </div></div>
           )}
         </div>
       )}
