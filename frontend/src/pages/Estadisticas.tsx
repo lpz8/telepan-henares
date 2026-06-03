@@ -37,29 +37,41 @@ export default function Estadisticas() {
 
   const loadProdMes = async (mes: string) => {
     const fin = `${mes}-${String(lastDay(mes)).padStart(2,'0')}`
-    const [pedData, preciosData] = await Promise.all([
-      supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)')
-        .gte('fecha', `${mes}-01`).lte('fecha', fin),
-      supabase.from('precios_proveedor').select('articulo, precio_cliente, precio_pvp')
-    ])
 
-    const precios = preciosData.data || []
-
-    // Función para encontrar precio del proveedor por nombre
-    const getPrecioProveedor = (nombre: string) => {
-      const n = nombre.toLowerCase()
-      return precios.find((p: any) =>
-        n.includes((p.articulo||'').toLowerCase()) ||
-        (p.articulo||'').toLowerCase().includes(n)
-      )
+    // Paginación para traer TODOS los pedidos sin límite
+    let allPeds: any[] = []
+    let page = 0
+    while (true) {
+      const { data: chunk } = await supabase
+        .from('pedidos')
+        .select('cantidad, precio, iva, producto_id, productos(nombre)')
+        .gte('fecha', `${mes}-01`)
+        .lte('fecha', fin)
+        .range(page * 1000, (page + 1) * 1000 - 1)
+      if (!chunk || chunk.length === 0) break
+      allPeds = allPeds.concat(chunk)
+      if (chunk.length < 1000) break
+      page++
     }
 
-    // Función de agrupación — igual que en Habituales
+    const { data: preciosData } = await supabase
+      .from('precios_proveedor').select('articulo, precio_cliente, precio_pvp')
+    const precios = preciosData || []
+
+    const getPrecioProveedor = (nombre: string) => {
+      const n = (nombre || '').toLowerCase().trim()
+      return precios.find((p: any) => {
+        const a = (p.articulo || '').toLowerCase().trim()
+        return n === a || n.includes(a) || a.includes(n)
+      })
+    }
+
+    // Agrupación — PICOS, CASA+PISTOLA, ARTESANA
     const getGrupo = (nombre: string) => {
-      const n = (nombre || '').toUpperCase()
+      const n = (nombre || '').toUpperCase().trim()
+      if (n.includes('PICOS') || n.startsWith('PICOS')) return '🥨 PICOS (todos)'
       if (n.includes('CASA') || n.includes('PISTOLA')) return '🏠 BARRAS — CASA + PISTOLA'
       if (n.includes('ARTESANA')) return '🥖 ARTESANA (todas)'
-      if (n.startsWith('PICOS') || n.includes('PICOS')) return '🥨 PICOS (todos)'
       return nombre
     }
 
@@ -68,7 +80,7 @@ export default function Estadisticas() {
       precioProveedor: number, costeTotal: number, esGrupo: boolean, productos: string[]
     }> = {}
 
-    ;(pedData.data || []).forEach((p: any) => {
+    allPeds.forEach((p: any) => {
       const nombreReal = p.productos?.nombre || 'Sin nombre'
       const grupo = getGrupo(nombreReal)
       const esGrupo = grupo !== nombreReal
@@ -85,7 +97,6 @@ export default function Estadisticas() {
       map[grupo].total += qty * precio
       map[grupo].conIva += qty * precio * (1 + iva / 100)
 
-      // Precio proveedor — buscar por nombre real del producto
       const prov = getPrecioProveedor(nombreReal)
       if (prov && Number(prov.precio_cliente) > 0) {
         map[grupo].precioProveedor = Number(prov.precio_cliente)
@@ -97,6 +108,7 @@ export default function Estadisticas() {
       }
     })
 
+    console.log(`📦 ${mes}: ${allPeds.length} líneas pedido → ${Object.keys(map).length} grupos`)
     setProdMes(Object.values(map).sort((a, b) => b.unidades - a.unidades))
   }
 
