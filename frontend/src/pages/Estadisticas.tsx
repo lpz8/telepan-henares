@@ -31,22 +31,65 @@ export default function Estadisticas() {
   const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
   const loadProdMes = async (mes: string) => {
-    const { data } = await supabase
-      .from('pedidos')
-      .select('cantidad, precio, iva, productos(nombre)')
-      .gte('fecha', `${mes}-01`)
-      .lte('fecha', `${mes}-31`)
-    const map: Record<string, { nombre: string, unidades: number, total: number, conIva: number }> = {}
-    ;(data || []).forEach((p: any) => {
-      const nombre = p.productos?.nombre || 'Sin nombre'
-      if (!map[nombre]) map[nombre] = { nombre, unidades: 0, total: 0, conIva: 0 }
+    const [pedData, preciosData] = await Promise.all([
+      supabase.from('pedidos').select('cantidad, precio, iva, productos(nombre)')
+        .gte('fecha', `${mes}-01`).lte('fecha', `${mes}-31`),
+      supabase.from('precios_proveedor').select('articulo, precio_cliente, precio_pvp')
+    ])
+
+    const precios = preciosData.data || []
+
+    // Función para encontrar precio del proveedor por nombre
+    const getPrecioProveedor = (nombre: string) => {
+      const n = nombre.toLowerCase()
+      return precios.find((p: any) =>
+        n.includes((p.articulo||'').toLowerCase()) ||
+        (p.articulo||'').toLowerCase().includes(n)
+      )
+    }
+
+    // Función de agrupación — igual que en Habituales
+    const getGrupo = (nombre: string) => {
+      const n = (nombre || '').toUpperCase()
+      if (n.includes('CASA') || n.includes('PISTOLA')) return '🏠 BARRAS — CASA + PISTOLA'
+      if (n.includes('ARTESANA')) return '🥖 ARTESANA (todas)'
+      return nombre
+    }
+
+    const map: Record<string, {
+      nombre: string, unidades: number, total: number, conIva: number,
+      precioProveedor: number, costeTotal: number, esGrupo: boolean, productos: string[]
+    }> = {}
+
+    ;(pedData.data || []).forEach((p: any) => {
+      const nombreReal = p.productos?.nombre || 'Sin nombre'
+      const grupo = getGrupo(nombreReal)
+      const esGrupo = grupo !== nombreReal
+
+      if (!map[grupo]) map[grupo] = {
+        nombre: grupo, unidades: 0, total: 0, conIva: 0,
+        precioProveedor: 0, costeTotal: 0, esGrupo, productos: []
+      }
+
       const qty = Number(p.cantidad)
       const precio = Number(p.precio || 0)
       const iva = Number(p.iva || 4)
-      map[nombre].unidades += qty
-      map[nombre].total += qty * precio
-      map[nombre].conIva += qty * precio * (1 + iva / 100)
+      map[grupo].unidades += qty
+      map[grupo].total += qty * precio
+      map[grupo].conIva += qty * precio * (1 + iva / 100)
+
+      // Precio proveedor — buscar por nombre real del producto
+      const prov = getPrecioProveedor(nombreReal)
+      if (prov && Number(prov.precio_cliente) > 0) {
+        map[grupo].precioProveedor = Number(prov.precio_cliente)
+        map[grupo].costeTotal += qty * Number(prov.precio_cliente)
+      }
+
+      if (esGrupo && !map[grupo].productos.includes(nombreReal)) {
+        map[grupo].productos.push(nombreReal)
+      }
     })
+
     setProdMes(Object.values(map).sort((a, b) => b.unidades - a.unidades))
   }
 
@@ -727,37 +770,42 @@ export default function Estadisticas() {
                     <tr>
                       <th style={{ width: 36 }}>#</th>
                       <th>Producto</th>
-                      <th style={{ textAlign: 'right' }}>Unidades</th>
-                      <th style={{ textAlign: 'right' }}>Precio unit. sin IVA</th>
-                      <th style={{ textAlign: 'right' }}>Total sin IVA</th>
-                      <th style={{ textAlign: 'right' }}>Total con IVA</th>
+                      <th style={{ textAlign: 'right' }}>Uds</th>
+                      <th style={{ textAlign: 'right' }}>Precio venta</th>
+                      <th style={{ textAlign: 'right' }}>Total venta</th>
+                      <th style={{ textAlign: 'right' }}>Coste prov.</th>
+                      <th style={{ textAlign: 'right' }}>Total coste</th>
+                      <th style={{ textAlign: 'right' }}>Margen</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {prodMes.map((p, i) => {
+                    {prodMes.map((p: any, i: number) => {
                       const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
-                      const pctTotal = prodMes.reduce((s,x)=>s+x.unidades,0) > 0
-                        ? (p.unidades / prodMes.reduce((s,x)=>s+x.unidades,0) * 100).toFixed(1)
-                        : '0'
+                      const pctTotal = prodMes.reduce((s: number, x: any) => s + x.unidades, 0) > 0
+                        ? (p.unidades / prodMes.reduce((s: number, x: any) => s + x.unidades, 0) * 100).toFixed(1) : '0'
+                      const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
+                      const margenPct = margen !== null && p.costeTotal > 0 ? ((margen / p.costeTotal) * 100).toFixed(1) : null
                       return (
-                        <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#fffaf6' }}>
+                        <tr key={i} style={{ background: p.esGrupo ? '#fff8f0' : i % 2 === 0 ? 'white' : '#fffaf6' }}>
                           <td>
-                            <span style={{
-                              fontFamily: 'Fredoka One', fontSize: '0.9rem',
-                              color: i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : i === 2 ? '#cd7c2f' : 'var(--gris)'
-                            }}>
+                            <span style={{ fontFamily: 'Fredoka One', fontSize: '0.9rem', color: i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : i === 2 ? '#cd7c2f' : 'var(--gris)' }}>
                               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}
                             </span>
                           </td>
                           <td>
-                            <div style={{ fontWeight: 700 }}>{p.nombre}</div>
-                            <div style={{ height: 4, background: '#f5e8d8', borderRadius: 2, marginTop: 3, width: '100%' }}>
-                              <div style={{ height: 4, background: '#E8670A', borderRadius: 2, width: `${pctTotal}%` }} />
+                            <div style={{ fontWeight: 700, color: p.esGrupo ? 'var(--naranja)' : 'inherit' }}>{p.nombre}</div>
+                            {p.esGrupo && p.productos?.length > 0 && (
+                              <div style={{ fontSize: '0.68rem', color: 'var(--gris)', marginTop: 2 }}>
+                                {p.productos.join(' · ')}
+                              </div>
+                            )}
+                            <div style={{ height: 3, background: '#f5e8d8', borderRadius: 2, marginTop: 3, width: '100%' }}>
+                              <div style={{ height: 3, background: p.esGrupo ? '#E8670A' : '#2563eb', borderRadius: 2, width: `${pctTotal}%` }} />
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--gris)', marginTop: 1 }}>{pctTotal}% del total</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--gris)', marginTop: 1 }}>{pctTotal}%</div>
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <span style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 800, padding: '3px 10px', borderRadius: 6, fontSize: '0.9rem' }}>
+                            <span style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
                               {p.unidades} ud
                             </span>
                           </td>
@@ -765,10 +813,21 @@ export default function Estadisticas() {
                             {precioUnit.toFixed(4)} €
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--naranja)' }}>
-                            {p.total.toFixed(2)} €
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>
                             {p.conIva.toFixed(2)} €
+                          </td>
+                          <td style={{ textAlign: 'right', fontSize: '0.85rem', color: p.costeTotal > 0 ? '#dc2626' : '#ccc' }}>
+                            {p.costeTotal > 0 ? `${p.precioProveedor.toFixed(4)} €` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: p.costeTotal > 0 ? '#dc2626' : '#ccc' }}>
+                            {p.costeTotal > 0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {margen !== null ? (
+                              <span style={{ fontWeight: 800, color: margen >= 0 ? '#16a34a' : '#dc2626', fontSize: '0.85rem' }}>
+                                {margen >= 0 ? '+' : ''}{margen.toFixed(2)}€<br/>
+                                <span style={{ fontSize: '0.7rem' }}>({margenPct}%)</span>
+                              </span>
+                            ) : <span style={{ color: '#ccc', fontSize: '0.78rem' }}>Sin precio prov.</span>}
                           </td>
                         </tr>
                       )
@@ -776,18 +835,14 @@ export default function Estadisticas() {
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#5a2d0c', color: 'white' }}>
-                      <td colSpan={2} style={{ fontFamily: 'Fredoka One', fontSize: '0.95rem', padding: '10px 10px' }}>
-                        TOTALES
-                      </td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One', fontSize: '1.05rem' }}>
-                        {prodMes.reduce((s,p)=>s+p.unidades,0)} ud
-                      </td>
+                      <td colSpan={2} style={{ fontFamily: 'Fredoka One', padding: '10px 10px' }}>TOTALES</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.unidades, 0)} ud</td>
                       <td></td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One', fontSize: '1.05rem' }}>
-                        {prodMes.reduce((s,p)=>s+p.total,0).toFixed(2)} €
-                      </td>
-                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One', fontSize: '1.05rem' }}>
-                        {prodMes.reduce((s,p)=>s+p.conIva,0).toFixed(2)} €
+                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.conIva, 0).toFixed(2)} €</td>
+                      <td></td>
+                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{prodMes.reduce((s: number, p: any) => s + p.costeTotal, 0).toFixed(2)} €</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
+                        {(() => { const m = prodMes.reduce((s: number, p: any) => s + p.conIva, 0) - prodMes.reduce((s: number, p: any) => s + p.costeTotal, 0); return m > 0 ? `+${m.toFixed(2)} €` : `${m.toFixed(2)} €` })()}
                       </td>
                     </tr>
                   </tfoot>
