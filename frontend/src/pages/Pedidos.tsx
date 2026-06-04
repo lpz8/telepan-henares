@@ -240,11 +240,14 @@ export default function Pedidos() {
     const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean; grupo?: string }> = {}
     pedidos.forEach(p => {
       const nombre: string = p.productos?.nombre || 'Desconocido'
-      const cantidad = Number(p.cantidad); const up = nombre.toUpperCase().trim()
-      if (up.startsWith('CASA') || up.startsWith('PISTOLA')) {
+      const cantidad = Number(p.cantidad); const up = nombre.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+      if (up.includes('PICO')) {
+        if (!totales['__PICOS__']) totales['__PICOS__'] = { nombre: 'PICOS (todos)', cantidad: 0, esAgrupado: true, grupo: 'picos' }
+        totales['__PICOS__'].cantidad += cantidad
+      } else if (up.includes('CASA') || up.includes('PISTOLA')) {
         if (!totales['__BARRA__']) totales['__BARRA__'] = { nombre: 'BARRAS — CASA + PISTOLA', cantidad: 0, esAgrupado: true, grupo: 'barra' }
         totales['__BARRA__'].cantidad += cantidad
-      } else if (up.startsWith('ARTESANA')) {
+      } else if (up.includes('ARTESANA')) {
         if (!totales['__ARTESANA__']) totales['__ARTESANA__'] = { nombre: 'ARTESANA (todas)', cantidad: 0, esAgrupado: true, grupo: 'artesana' }
         totales['__ARTESANA__'].cantidad += cantidad
       } else { if (!totales[up]) totales[up] = { nombre, cantidad: 0 }; totales[up].cantidad += cantidad }
@@ -257,11 +260,14 @@ export default function Pedidos() {
     const pedsCat = pedidos.filter(p => (p.productos?.categoria || 'Pan') === cat)
     const totales: Record<string, { nombre: string; cantidad: number; esAgrupado?: boolean; grupo?: string }> = {}
     pedsCat.forEach(p => {
-      const nombre: string = p.productos?.nombre || 'Desconocido'; const cantidad = Number(p.cantidad); const up = nombre.toUpperCase().trim()
-      if (cat === 'Pan' && (up.startsWith('CASA') || up.startsWith('PISTOLA'))) {
+      const nombre: string = p.productos?.nombre || 'Desconocido'; const cantidad = Number(p.cantidad); const up = nombre.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+      if (up.includes('PICO')) {
+        if (!totales['__PICOS__']) totales['__PICOS__'] = { nombre: 'PICOS (todos)', cantidad: 0, esAgrupado: true, grupo: 'picos' }
+        totales['__PICOS__'].cantidad += cantidad
+      } else if (cat === 'Pan' && (up.includes('CASA') || up.includes('PISTOLA'))) {
         if (!totales['__BARRA__']) totales['__BARRA__'] = { nombre: 'BARRAS — CASA + PISTOLA', cantidad: 0, esAgrupado: true, grupo: 'barra' }
         totales['__BARRA__'].cantidad += cantidad
-      } else if (cat === 'Pan' && up.startsWith('ARTESANA')) {
+      } else if (cat === 'Pan' && up.includes('ARTESANA')) {
         if (!totales['__ARTESANA__']) totales['__ARTESANA__'] = { nombre: 'ARTESANA (todas)', cantidad: 0, esAgrupado: true, grupo: 'artesana' }
         totales['__ARTESANA__'].cantidad += cantidad
       } else { if (!totales[up]) totales[up] = { nombre, cantidad: 0 }; totales[up].cantidad += cantidad }
@@ -378,7 +384,9 @@ export default function Pedidos() {
                   items.forEach((p: any) => {
                     const n = p.productos?.nombre?.toUpperCase() || ''
                     const matches = a.esAgrupado
-                      ? (a.grupo === 'barra' ? (n.startsWith('CASA') || n.startsWith('PISTOLA')) : n.startsWith('ARTESANA'))
+                      ? (a.grupo === 'barra' ? (n.includes('CASA') || n.includes('PISTOLA'))
+                        : a.grupo === 'artesana' ? n.includes('ARTESANA')
+                        : n.includes('PICO'))
                       : n === a.nombre.toUpperCase()
                     if (matches) {
                       cant += Number(p.cantidad)
@@ -395,11 +403,11 @@ export default function Pedidos() {
                   onMouseEnter={e => (e.currentTarget.style.background = '#fff3e8')}
                   onMouseLeave={e => (e.currentTarget.style.background = a.esAgrupado ? '#fff8f0' : '')}>
                   <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {a.esAgrupado && <span style={{ background: a.grupo === 'barra' ? 'var(--naranja)' : '#7c3aed', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>{a.grupo === 'barra' ? 'CASA+PISTOLA' : 'ARTESANA'}</span>}
-                    <strong style={{ color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : 'var(--marron)' }}>{a.nombre}</strong>
+                    {a.esAgrupado && <span style={{ background: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : '#16a34a', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>{a.grupo === 'barra' ? 'CASA+PISTOLA' : a.grupo === 'artesana' ? 'ARTESANA' : 'PICOS'}</span>}
+                    <strong style={{ color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : 'var(--marron)' }}>{a.nombre}</strong>
                     <span style={{ fontSize: '0.7rem', color: 'var(--gris)', marginLeft: 4 }}>👆 {clientesQueOrdenaron.length} clientes</span>
                   </div></td>
-                  <td style={{ textAlign: 'center' }}><span style={{ fontFamily: 'Fredoka One', fontSize: '1.6rem', color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : '#2563eb' }}>{a.cantidad}</span></td>
+                  <td style={{ textAlign: 'center' }}><span style={{ fontFamily: 'Fredoka One', fontSize: '1.6rem', color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : '#2563eb' }}>{a.cantidad}</span></td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                       <div style={{ width: 80, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
