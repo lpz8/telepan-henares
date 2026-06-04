@@ -269,11 +269,101 @@ export default function Pedidos() {
     return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
   }
 
-  const renderTabla = (arts: any[], total: number) => (
+  const buildTablaHTML = (arts: any[], total: number, titulo: string) => {
+    const rows = arts.map((a, i) => `<tr style="background:${i%2===0?'white':'#fffaf6'}">
+      <td><strong>${a.nombre}</strong>${a.esAgrupado ? `<br><small style="color:#888">${a.subNombres?.join(' / ')|| ''}</small>` : ''}</td>
+      <td style="text-align:center;font-weight:800;color:#2563eb">${a.cantidad} ud</td>
+      <td style="text-align:center;color:#888;font-size:0.85rem">${total > 0 ? (a.cantidad / total * 100).toFixed(1) : 0}%</td>
+    </tr>`).join('')
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>${titulo} - ${fecha}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:28px 36px;color:#1a1a1a;font-size:12px}
+      h1{color:#E8670A;font-size:1.3rem;margin-bottom:4px}
+      .sub{color:#888;font-size:0.78rem;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#E8670A;color:white;padding:7px 10px;text-align:left;font-size:0.7rem;text-transform:uppercase}
+      td{padding:7px 10px;border-bottom:1px solid #f5e0c5}
+      tfoot tr{background:#5a2d0c;color:white;font-weight:900}
+      tfoot td{border:none;padding:8px 10px}
+    </style></head><body>
+    <h1>${titulo} - ${fecha}</h1>
+    <div class="sub">TelePan Henares - ${new Date().toLocaleDateString('es-ES')}</div>
+    <table>
+      <thead><tr><th>Articulo</th><th>Uds</th><th>%</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>TOTAL</td><td style="text-align:center">${total} ud</td><td></td></tr></tfoot>
+    </table></body></html>`
+  }
+
+  const descargarTablaExcel = async (arts: any[], titulo: string) => {
+    globalToast('Generando Excel...')
+    try {
+      if (!(window as any).XLSX) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+          s.onload = () => resolve(); s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const XLSX = (window as any).XLSX
+      const wb = XLSX.utils.book_new()
+      const rows = arts.map(a => ({ 'Articulo': a.nombre, 'Unidades': a.cantidad }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), titulo.slice(0, 30))
+      XLSX.writeFile(wb, `${titulo}_${fecha}.xlsx`)
+      globalToast('Excel descargado')
+    } catch(e: any) { globalToast('Error: ' + e.message, 'error') }
+  }
+
+  const descargarTablaPDF = (arts: any[], total: number, titulo: string) => {
+    const html = buildTablaHTML(arts, total, titulo)
+    const w = window.open('', '_blank')
+    if (!w) return globalToast('Permite las ventanas emergentes', 'error')
+    w.document.write(html); w.document.close()
+    globalToast('Usa Ctrl+P para guardar como PDF')
+  }
+
+  const descargarTablaJPG = async (arts: any[], total: number, titulo: string) => {
+    globalToast('Generando imagen...')
+    try {
+      if (!(window as any).html2canvas) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+          s.onload = () => resolve(); s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const h2c = (window as any).html2canvas
+      const html = buildTablaHTML(arts, total, titulo)
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:700px;height:1000px;border:none'
+      document.body.appendChild(iframe)
+      await new Promise<void>(resolve => { iframe.onload = () => resolve(); iframe.src = blobUrl })
+      if (iframe.contentWindow) (iframe.contentWindow as any).print = () => {}
+      await new Promise(r => setTimeout(r, 1000))
+      const canvas = await h2c(iframe.contentDocument!.body, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: 700 })
+      document.body.removeChild(iframe); URL.revokeObjectURL(blobUrl)
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/jpeg', 0.95)
+      a.download = `${titulo}_${fecha}.jpg`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      globalToast('JPG descargado')
+    } catch(e: any) { globalToast('Error: ' + e.message, 'error') }
+  }
+
+  const renderTabla = (arts: any[], total: number, titulo = 'Resumen') => (
     <div className="card" style={{ padding: 0 }}>
-      <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>📦 {fecha}</span>
-        <span style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)' }}>{total} ud</span>
+      <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>{titulo} — {fecha} — <span style={{ color: 'var(--naranja)' }}>{total} ud</span></span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => descargarTablaExcel(arts, titulo)}>Excel</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => descargarTablaPDF(arts, total, titulo)}>PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => descargarTablaJPG(arts, total, titulo)}>JPG</button>
+        </div>
       </div>
       <div className="table-wrap">
         <table>
@@ -410,7 +500,7 @@ export default function Pedidos() {
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: '#1e40af' }}>
             📋 Total del <strong>{fecha}</strong> — CASA* y PISTOLA* agrupadas.
           </div>
-          {renderTabla(resumenArticulos, totalResumen)}
+          {renderTabla(resumenArticulos, totalResumen, 'Resumen total')}
         </div>
       )}
 
@@ -421,7 +511,7 @@ export default function Pedidos() {
           <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700 }}>
             {CAT_EMOJI[tabActiva]} <strong>{tabActiva}</strong> del {fecha} — <strong style={{ color: 'var(--naranja)' }}>{total} unidades</strong>
           </div>
-          {renderTabla(arts, total)}
+          {renderTabla(arts, total, tabActiva)}
         </div>
       })()}
 
