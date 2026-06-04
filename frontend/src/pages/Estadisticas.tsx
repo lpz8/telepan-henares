@@ -14,16 +14,17 @@ export default function Estadisticas() {
   const [mesProd, setMesProd] = useState(new Date().toISOString().slice(0,7))
   const [prodMes, setProdMes] = useState<any[]>([])
   const [busqProd, setBusqProd] = useState('')
-  const [tipoProd, setTipoProd] = useState('todos')
+  const [tipoProd, setTipoProd] = useState('Total')
+  const [editandoTabla, setEditandoTabla] = useState(false)
 
   const prodMesFiltrado = busqProd.trim()
     ? prodMes.filter(p => p.nombre.toLowerCase().includes(busqProd.toLowerCase()))
     : prodMes
 
-  const buildProdHTML = () => {
+  const buildProdHTML = (filas: any[], catLabel: string) => {
     const mesLabel = MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]
     const anioLabel = mesProd.split('-')[0]
-    const rows = prodMesFiltrado.map((p: any, i: number) => {
+    const rows = filas.map((p: any, i: number) => {
       const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
       const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
       return `<tr style="background:${p.esGrupo?'#fff8f0':i%2===0?'white':'#fffaf6'}">
@@ -37,7 +38,7 @@ export default function Estadisticas() {
         <td style="text-align:right;font-weight:700;color:${margen!==null?(margen>=0?'#16a34a':'#dc2626'):'#ccc'}">${margen!==null?(margen>=0?'+':'')+margen.toFixed(2)+' €':'—'}</td>
       </tr>`
     }).join('')
-    const tot = prodMesFiltrado
+    const tot = filas
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>Productos ${mesLabel} ${anioLabel} — TelePan</title>
     <style>
@@ -54,7 +55,7 @@ export default function Estadisticas() {
       tfoot tr{background:#5a2d0c;color:white;font-weight:900}
       @media print{body{padding:20px 28px}}
     </style></head><body>
-    <h1>📦 Desglose de productos — ${mesLabel} ${anioLabel}</h1>
+    <h1>📦 ${catLabel} — ${mesLabel} ${anioLabel}</h1>
     <div class="sub">TelePan Henares · Para cotejar con la panificadora · ${new Date().toLocaleDateString('es-ES')}</div>
     <div class="kpis">
       <div class="kpi"><div class="kpi-val">${tot.reduce((s:number,p:any)=>s+p.unidades,0)}</div><div class="kpi-lbl">Unidades</div></div>
@@ -78,15 +79,15 @@ export default function Estadisticas() {
     </body></html>`
   }
 
-  const descargarProdPDF = async () => {
-    const html = buildProdHTML()
+  const descargarProdPDF = async (filas: any[], catLabel: string) => {
+    const html = buildProdHTML(filas, catLabel)
     const w = window.open('', '_blank')
-    if (!w) return
+    if (!w) return globalToast('Permite las ventanas emergentes', 'error')
     w.document.write(html); w.document.close()
-    setTimeout(() => { w.print(); globalToast('💡 Selecciona "Guardar como PDF" en el diálogo') }, 800)
+    setTimeout(() => { if (w.contentWindow) (w.contentWindow as any).print = () => {}; w.print(); globalToast('💡 Selecciona "Guardar como PDF" en el diálogo') }, 800)
   }
 
-  const descargarProdJPG = async () => {
+  const descargarProdJPG = async (filas: any[], catLabel: string) => {
     globalToast('⏳ Generando imagen...')
     try {
       if (!(window as any).html2canvas) {
@@ -98,7 +99,7 @@ export default function Estadisticas() {
         })
       }
       const h2c = (window as any).html2canvas
-      const html = buildProdHTML()
+      const html = buildProdHTML(filas, catLabel)
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
       const blobUrl = URL.createObjectURL(blob)
       const iframe = document.createElement('iframe')
@@ -114,7 +115,7 @@ export default function Estadisticas() {
       const mesLabel = MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/jpeg', 0.95)
-      a.download = `Productos_${mesLabel}_${mesProd.split('-')[0]}.jpg`
+      a.download = `${catLabel}_${mesLabel}_${mesProd.split('-')[0]}.jpg`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       globalToast('✅ JPG descargado')
     } catch(err: any) { globalToast('Error: ' + err.message, 'error') }
@@ -830,172 +831,185 @@ export default function Estadisticas() {
 
       {/* PRODUCTOS */}
       {tabActiva === 'productos' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
 
-          {/* Cabecera con selector mes, buscador y botones descarga */}
-          <div className="card" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>📦 Mes:</span>
-              <input type="month" className="input" style={{ width: 'auto' }}
-                value={mesProd} onChange={e => setMesProd(e.target.value)} />
-              <input className="input" style={{ flex: 1, minWidth: 180 }}
+          {/* Cabecera */}
+          <div className="card" style={{padding:'14px 18px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <span style={{fontFamily:'Fredoka One',color:'var(--marron)'}}>📦 Mes:</span>
+              <input type="month" className="input" style={{width:'auto'}}
+                value={mesProd} onChange={e => { setMesProd(e.target.value); setEditandoTabla(false) }} />
+              <input className="input" style={{flex:1,minWidth:180}}
                 placeholder="🔍 Buscar producto..."
                 value={busqProd} onChange={e => setBusqProd(e.target.value)} />
-              <button className="btn btn-secondary btn-sm" onClick={() => descargarProdPDF()}
-                title="Descargar PDF">⬇️ PDF</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => descargarProdJPG()}
-                title="Descargar JPG">⬇️ JPG</button>
             </div>
-            {prodMes.length > 0 && (
-              <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--gris)' }}>
-                {prodMesFiltrado.length} productos · {prodMesFiltrado.reduce((s: number, p: any) => s + p.unidades, 0)} unidades · {prodMesFiltrado.reduce((s: number, p: any) => s + p.conIva, 0).toFixed(2)} €
-              </div>
-            )}
           </div>
 
-          {/* KPIs del mes */}
+          {/* KPIs */}
           {prodMes.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
               {[
-                { label: '🍞 Total unidades', value: prodMes.reduce((s: number, p: any) => s+p.unidades, 0).toString(), color: '#2563eb', bg: '#eff6ff' },
-                { label: '💰 Total sin IVA', value: prodMes.reduce((s: number, p: any) => s+p.total, 0).toFixed(2)+' €', color: 'var(--naranja)', bg: '#fff8f0' },
-                { label: '💳 Total con IVA', value: prodMes.reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)+' €', color: '#16a34a', bg: '#f0fdf4' },
-                { label: '🏭 Coste proveedor', value: prodMes.reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)+' €', color: '#dc2626', bg: '#fef2f2' },
-                { label: '📊 Margen bruto', value: (prodMes.reduce((s: number, p: any) => s+p.conIva, 0) - prodMes.reduce((s: number, p: any) => s+p.costeTotal, 0)).toFixed(2)+' €', color: '#7c3aed', bg: '#f5f3ff' },
-              ].map(k => (
-                <div key={k.label} className="card" style={{ padding: '12px', background: k.bg, textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Fredoka One', fontSize: '1.2rem', color: k.color }}>{k.value}</div>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--gris)', textTransform: 'uppercase', marginTop: 2 }}>{k.label}</div>
+                {label:'🍞 Unidades',value:prodMesFiltrado.reduce((s:number,p:any)=>s+p.unidades,0).toString(),color:'#2563eb',bg:'#eff6ff'},
+                {label:'💰 Sin IVA',value:prodMesFiltrado.reduce((s:number,p:any)=>s+p.total,0).toFixed(2)+' €',color:'var(--naranja)',bg:'#fff8f0'},
+                {label:'💳 Con IVA',value:prodMesFiltrado.reduce((s:number,p:any)=>s+p.conIva,0).toFixed(2)+' €',color:'#16a34a',bg:'#f0fdf4'},
+                {label:'🏭 Coste prov.',value:prodMesFiltrado.reduce((s:number,p:any)=>s+p.costeTotal,0).toFixed(2)+' €',color:'#dc2626',bg:'#fef2f2'},
+              ].map(k=>(
+                <div key={k.label} className="card" style={{padding:'10px',background:k.bg,textAlign:'center'}}>
+                  <div style={{fontFamily:'Fredoka One',fontSize:'1.1rem',color:k.color}}>{k.value}</div>
+                  <div style={{fontSize:'0.68rem',fontWeight:800,color:'var(--gris)',textTransform:'uppercase',marginTop:2}}>{k.label}</div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Pestañas por CATEGORÍA de producto */}
-          {prodMes.length > 0 && (
-            <div>
-              <div className="tabs" style={{ marginBottom: 0, flexWrap: 'wrap' }}>
-                <div className={`tab ${tipoProd === 'todos' ? 'active' : ''}`} onClick={() => setTipoProd('todos')}>
-                  📦 Todos ({prodMes.reduce((s: number, p: any) => s+p.unidades, 0)})
+          {/* Pestañas por categoría */}
+          {prodMes.length > 0 && (() => {
+            const CATS = ['Total','Pan','Bollería','Pastelería','Huevos','Otros']
+            const EMOJIS: Record<string,string> = {Total:'📦',Pan:'🍞',Bollería:'🥐',Pastelería:'🎂',Huevos:'🥚',Otros:'📦'}
+            return (
+              <div>
+                <div className="tabs" style={{flexWrap:'wrap',marginBottom:0}}>
+                  {CATS.map(cat => {
+                    const items = cat === 'Total'
+                      ? prodMesFiltrado
+                      : prodMesFiltrado.filter((p:any) => p.categoria === cat)
+                    const uds = items.reduce((s:number,p:any)=>s+p.unidades,0)
+                    if (cat !== 'Total' && uds === 0) return null
+                    return (
+                      <div key={cat} className={`tab ${tipoProd===cat?'active':''}`}
+                        onClick={() => { setTipoProd(cat); setEditandoTabla(false) }}>
+                        {EMOJIS[cat]} {cat} ({uds})
+                      </div>
+                    )
+                  })}
                 </div>
-                {['Pan','Bollería','Pastelería','Huevos','Otros'].map(cat => {
-                  const total = prodMes.filter((p: any) => p.categoria === cat).reduce((s: number, p: any) => s+p.unidades, 0)
-                  if (total === 0) return null
-                  const emoji = cat === 'Pan' ? '🍞' : cat === 'Bollería' ? '🥐' : cat === 'Pastelería' ? '🎂' : cat === 'Huevos' ? '🥚' : '📦'
-                  return (
-                    <div key={cat} className={`tab ${tipoProd === cat ? 'active' : ''}`} onClick={() => setTipoProd(cat)}>
-                      {emoji} {cat} ({total})
-                    </div>
-                  )
-                })}
-              </div>
 
-              {/* Tabla desglose */}
-              <div id="tabla-productos-pdf" className="card" style={{ padding: 0, borderRadius: '0 0 12px 12px' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'Fredoka One', color: 'var(--marron)' }}>
-                    🧾 Desglose para cotejar — {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>
-                    {prodMesFiltrado.filter((p: any) => tipoProd === 'todos' ? true : p.categoria === tipoProd).length} líneas
-                  </span>
-                </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Producto</th>
-                        <th style={{ textAlign: 'right' }}>Uds</th>
-                        <th style={{ textAlign: 'right' }}>Precio venta</th>
-                        <th style={{ textAlign: 'right' }}>Total c/IVA</th>
-                        <th style={{ textAlign: 'right' }}>Coste prov.</th>
-                        <th style={{ textAlign: 'right' }}>Total coste</th>
-                        <th style={{ textAlign: 'right' }}>Margen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {prodMesFiltrado
-                        .filter((p: any) =>
-                          tipoProd === 'todos' ? true :
-                          p.categoria === tipoProd
-                        )
-                        .map((p: any, i: number) => {
-                          const precioUnit = p.unidades > 0 ? p.total / p.unidades : 0
-                          const totalProd = prodMesFiltrado.reduce((s: number, x: any) => s + x.unidades, 0)
-                          const pct = totalProd > 0 ? (p.unidades / totalProd * 100).toFixed(1) : '0'
-                          const margen = p.costeTotal > 0 ? p.conIva - p.costeTotal : null
-                          const margenPct = margen !== null && p.costeTotal > 0 ? (margen / p.costeTotal * 100).toFixed(1) : null
-                          return (
-                            <tr key={i} style={{ background: p.esGrupo ? '#fff8f0' : i%2===0 ? 'white' : '#fffaf6' }}>
-                              <td style={{ fontFamily: 'Fredoka One', color: i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#cd7c2f':'var(--gris)' }}>
-                                {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
-                              </td>
-                              <td>
-                                <div style={{ fontWeight: 700, color: p.esGrupo ? 'var(--naranja)' : 'inherit' }}>{p.nombre}</div>
-                                {p.esGrupo && p.productos?.length > 0 && (
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--gris)' }}>{p.productos.join(' · ')}</div>
-                                )}
-                                <div style={{ height: 3, background: '#f5e8d8', borderRadius: 2, marginTop: 3 }}>
-                                  <div style={{ height: 3, background: p.esGrupo ? '#E8670A' : '#2563eb', borderRadius: 2, width: `${pct}%` }} />
-                                </div>
-                                <div style={{ fontSize: '0.65rem', color: 'var(--gris)' }}>{pct}%</div>
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <span style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>{p.unidades} ud</span>
-                              </td>
-                              <td style={{ textAlign: 'right', color: 'var(--gris)', fontSize: '0.82rem' }}>{precioUnit.toFixed(4)} €</td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--naranja)' }}>{p.conIva.toFixed(2)} €</td>
-                              <td style={{ textAlign: 'right', fontSize: '0.82rem', color: p.costeTotal>0 ? '#dc2626' : '#ccc' }}>
-                                {p.costeTotal>0 ? `${p.precioProveedor.toFixed(4)} €` : '—'}
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, color: p.costeTotal>0 ? '#dc2626' : '#ccc' }}>
-                                {p.costeTotal>0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                {margen !== null ? (
-                                  <span style={{ fontWeight: 800, color: margen>=0?'#16a34a':'#dc2626', fontSize: '0.82rem' }}>
-                                    {margen>=0?'+':''}{margen.toFixed(2)}€<br/>
-                                    <span style={{ fontSize: '0.7rem' }}>({margenPct}%)</span>
-                                  </span>
-                                ) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>—</span>}
+                {/* Tabla editable + botones descarga */}
+                {(() => {
+                  const filas = tipoProd === 'Total'
+                    ? prodMesFiltrado
+                    : prodMesFiltrado.filter((p:any) => p.categoria === tipoProd)
+                  const totUds = filas.reduce((s:number,p:any)=>s+p.unidades,0)
+                  const totIva = filas.reduce((s:number,p:any)=>s+p.conIva,0)
+                  const totCoste = filas.reduce((s:number,p:any)=>s+p.costeTotal,0)
+                  return (
+                    <div className="card" style={{padding:0,borderRadius:'0 0 12px 12px'}}>
+                      {/* Barra acciones */}
+                      <div style={{padding:'10px 16px',borderBottom:'1px solid #f5e8d8',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                        <span style={{fontFamily:'Fredoka One',color:'var(--marron)',fontSize:'0.95rem'}}>
+                          {EMOJIS[tipoProd]} {tipoProd} — {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}
+                          <span style={{fontWeight:400,fontSize:'0.8rem',color:'var(--gris)',marginLeft:8}}>{filas.length} productos · {totUds} ud</span>
+                        </span>
+                        <div style={{display:'flex',gap:6}}>
+                          <button className={`btn btn-sm ${editandoTabla?'btn-primary':'btn-secondary'}`}
+                            onClick={() => setEditandoTabla(!editandoTabla)}>
+                            {editandoTabla ? '💾 Guardar cambios' : '✏️ Editar tabla'}
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => descargarProdPDF(filas, tipoProd)}>⬇️ PDF</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => descargarProdJPG(filas, tipoProd)}>⬇️ JPG</button>
+                        </div>
+                      </div>
+
+                      {editandoTabla && (
+                        <div style={{background:'#eff6ff',padding:'8px 16px',fontSize:'0.82rem',color:'#1e40af',borderBottom:'1px solid #bfdbfe'}}>
+                          ✏️ Modo edición — modifica las cantidades o importes directamente en la tabla. Pulsa "Guardar cambios" cuando termines.
+                        </div>
+                      )}
+
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>Producto</th>
+                              <th style={{textAlign:'right'}}>Unidades</th>
+                              <th style={{textAlign:'right'}}>Precio unit.</th>
+                              <th style={{textAlign:'right'}}>Total c/IVA</th>
+                              <th style={{textAlign:'right'}}>Coste prov.</th>
+                              <th style={{textAlign:'right'}}>Margen</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filas.map((p:any,i:number) => {
+                              const precioUnit = p.unidades>0 ? p.total/p.unidades : 0
+                              const margen = p.costeTotal>0 ? p.conIva-p.costeTotal : null
+                              const pct = totUds>0 ? (p.unidades/totUds*100).toFixed(1) : '0'
+                              return (
+                                <tr key={i} style={{background:p.esGrupo?'#fff8f0':i%2===0?'white':'#fffaf6'}}>
+                                  <td style={{fontFamily:'Fredoka One',color:i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#cd7c2f':'var(--gris)'}}>
+                                    {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+                                  </td>
+                                  <td>
+                                    <div style={{fontWeight:700,color:p.esGrupo?'var(--naranja)':'inherit'}}>{p.nombre}</div>
+                                    {p.esGrupo && p.productos?.length > 0 && (
+                                      <div style={{fontSize:'0.68rem',color:'var(--gris)'}}>{p.productos.join(' · ')}</div>
+                                    )}
+                                    <div style={{height:3,background:'#f5e8d8',borderRadius:2,marginTop:2}}>
+                                      <div style={{height:3,background:p.esGrupo?'#E8670A':'#2563eb',borderRadius:2,width:`${pct}%`}}/>
+                                    </div>
+                                    <div style={{fontSize:'0.65rem',color:'var(--gris)'}}>{pct}%</div>
+                                  </td>
+                                  <td style={{textAlign:'right'}}>
+                                    {editandoTabla ? (
+                                      <input type="number" min="0" style={{width:70,textAlign:'right',padding:'2px 6px',border:'1px solid #f5e8d8',borderRadius:6,fontSize:'0.85rem'}}
+                                        defaultValue={p.unidades}
+                                        onChange={e => {
+                                          const v = parseFloat(e.target.value)||0
+                                          setProdMes((prev:any[]) => prev.map((x:any) => x.nombre===p.nombre ? {...x,unidades:v} : x))
+                                        }}/>
+                                    ) : (
+                                      <span style={{background:'#eff6ff',color:'#2563eb',fontWeight:800,padding:'2px 8px',borderRadius:6}}>{p.unidades} ud</span>
+                                    )}
+                                  </td>
+                                  <td style={{textAlign:'right',color:'var(--gris)',fontSize:'0.82rem'}}>{precioUnit.toFixed(4)} €</td>
+                                  <td style={{textAlign:'right',fontWeight:700,color:'var(--naranja)'}}>
+                                    {editandoTabla ? (
+                                      <input type="number" min="0" step="0.01" style={{width:80,textAlign:'right',padding:'2px 6px',border:'1px solid #f5e8d8',borderRadius:6,fontSize:'0.85rem'}}
+                                        defaultValue={p.conIva.toFixed(2)}
+                                        onChange={e => {
+                                          const v = parseFloat(e.target.value)||0
+                                          setProdMes((prev:any[]) => prev.map((x:any) => x.nombre===p.nombre ? {...x,conIva:v} : x))
+                                        }}/>
+                                    ) : `${p.conIva.toFixed(2)} €`}
+                                  </td>
+                                  <td style={{textAlign:'right',color:p.costeTotal>0?'#dc2626':'#ccc',fontSize:'0.82rem'}}>
+                                    {p.costeTotal>0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
+                                  </td>
+                                  <td style={{textAlign:'right'}}>
+                                    {margen!==null ? (
+                                      <span style={{fontWeight:800,color:margen>=0?'#16a34a':'#dc2626',fontSize:'0.82rem'}}>
+                                        {margen>=0?'+':''}{margen.toFixed(2)}€
+                                      </span>
+                                    ) : <span style={{color:'#ccc'}}>—</span>}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{background:'#5a2d0c',color:'white'}}>
+                              <td colSpan={2} style={{fontFamily:'Fredoka One',padding:'10px'}}>TOTALES</td>
+                              <td style={{textAlign:'right',fontFamily:'Fredoka One'}}>{totUds} ud</td>
+                              <td></td>
+                              <td style={{textAlign:'right',fontFamily:'Fredoka One'}}>{totIva.toFixed(2)} €</td>
+                              <td style={{textAlign:'right',fontFamily:'Fredoka One'}}>{totCoste.toFixed(2)} €</td>
+                              <td style={{textAlign:'right',fontFamily:'Fredoka One',color:totIva-totCoste>=0?'#86efac':'#fca5a5'}}>
+                                {totCoste>0 ? `${(totIva-totCoste)>=0?'+':''}${(totIva-totCoste).toFixed(2)} €` : '—'}
                               </td>
                             </tr>
-                          )
-                        })}
-                    </tbody>
-                    <tfoot>
-                      <tr style={{ background: '#5a2d0c', color: 'white' }}>
-                        <td colSpan={2} style={{ fontFamily: 'Fredoka One', padding: '10px' }}>TOTALES</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.unidades, 0)} ud
-                        </td>
-                        <td></td>
-                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.conIva, 0).toFixed(2)} €
-                        </td>
-                        <td></td>
-                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd).reduce((s: number, p: any) => s+p.costeTotal, 0).toFixed(2)} €
-                        </td>
-                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>
-                          {(() => {
-                            const fil = prodMesFiltrado.filter((p: any) => tipoProd==='todos'?true:p.categoria===tipoProd)
-                            const m = fil.reduce((s: number, p: any) => s+p.conIva, 0) - fil.reduce((s: number, p: any) => s+p.costeTotal, 0)
-                            return m !== 0 ? `${m>0?'+':''}${m.toFixed(2)} €` : '—'
-                          })()}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {prodMes.length === 0 && (
             <div className="card"><div className="empty-state">
-              <span style={{ fontSize: 40 }}>📦</span>
+              <span style={{fontSize:40}}>📦</span>
               <p>No hay pedidos en {MESES_NOMBRES[parseInt(mesProd.split('-')[1])-1]} {mesProd.split('-')[0]}</p>
             </div></div>
           )}
