@@ -244,7 +244,7 @@ export default function PedidosModelo() {
       validas.forEach(l => l.dias.forEach(dia => inserts.push({
         user_id: user.id, cliente_id: editClienteId, producto_id: l.producto_id,
         dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0,
-        fecha_inicio_alternos: l.frecuencia === 'si_no' ? new Date().toISOString().split('T')[0] : null
+        fecha_inicio_alternos: l.frecuencia === 'si_no' ? (l.fecha_inicio_alternos || new Date().toISOString().split('T')[0]) : null
       })))
       const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
       if (insErr) {
@@ -298,7 +298,7 @@ export default function PedidosModelo() {
       user_id: user.id, cliente_id: formCliente, producto_id: l.producto_id,
       dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos',
       descuento: l.descuento || 0,
-      fecha_inicio_alternos: l.frecuencia === 'si_no' ? new Date().toISOString().split('T')[0] : null
+      fecha_inicio_alternos: l.frecuencia === 'si_no' ? (l.fecha_inicio_alternos || new Date().toISOString().split('T')[0]) : null
     })))
     const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
     if (insErr) {
@@ -307,7 +307,7 @@ export default function PedidosModelo() {
     }
     globalToast(`✅ ${inserts.length} habituales guardados`)
     setOpenAdd(false); setFormCliente('')
-    setFormLineas([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0 }])
+    setFormLineas([{ producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0, fecha_inicio_alternos: new Date().toISOString().split('T')[0] }])
     load()
   }
 
@@ -748,7 +748,7 @@ export default function PedidosModelo() {
                 (idx) => setEditLineas(prev => prev.filter((_, j) => j !== idx)),
                 editLineas.length
               ))}
-              <button className="btn btn-secondary btn-sm" onClick={() => setEditLineas(prev => [...prev, { producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0, ids: [] }])}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditLineas(prev => [...prev, { producto_id: '', dias: [], cantidad: 1, frecuencia: 'todos', descuento: 0, ids: [], fecha_inicio_alternos: new Date().toISOString().split('T')[0] }])}>
                 <Plus size={13} /> Añadir producto
               </button>
             </div>
