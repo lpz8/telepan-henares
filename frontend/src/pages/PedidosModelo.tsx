@@ -35,6 +35,7 @@ interface LineaForm {
   cantidad: number
   frecuencia: string
   descuento: number
+  fecha_inicio_alternos?: string
 }
 
 interface LineaEdit extends LineaForm {
@@ -242,7 +243,8 @@ export default function PedidosModelo() {
       const inserts: any[] = []
       validas.forEach(l => l.dias.forEach(dia => inserts.push({
         user_id: user.id, cliente_id: editClienteId, producto_id: l.producto_id,
-        dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0
+        dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos', descuento: l.descuento || 0,
+        fecha_inicio_alternos: l.frecuencia === 'si_no' ? new Date().toISOString().split('T')[0] : null
       })))
       const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
       if (insErr) {
@@ -295,7 +297,8 @@ export default function PedidosModelo() {
     validas.forEach(l => l.dias.forEach(dia => inserts.push({
       user_id: user.id, cliente_id: formCliente, producto_id: l.producto_id,
       dia_semana: dia, cantidad: l.cantidad, frecuencia: l.frecuencia || 'todos',
-      descuento: l.descuento || 0
+      descuento: l.descuento || 0,
+      fecha_inicio_alternos: l.frecuencia === 'si_no' ? new Date().toISOString().split('T')[0] : null
     })))
     const { error: insErr } = await supabase.from('pedidos_modelo').insert(inserts)
     if (insErr) {
@@ -458,6 +461,17 @@ export default function PedidosModelo() {
           {FRECUENCIAS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
       </div>
+      {linea.frecuencia === 'si_no' && (
+        <div className="input-group" style={{ marginBottom: 8, background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 8, padding: '10px 12px' }}>
+          <label className="input-label">Fecha de referencia (primer día que SÍ toca)</label>
+          <input type="date" className="input"
+            value={(linea as any).fecha_inicio_alternos || new Date().toISOString().split('T')[0]}
+            onChange={e => onChange(i, 'fecha_inicio_alternos', e.target.value)} />
+          <div style={{ fontSize: '0.75rem', color: 'var(--gris)', marginTop: 4 }}>
+            La app calculará automáticamente los días que toca y los que no, contando desde esta fecha.
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <label className="input-label" style={{ margin: 0 }}>Días de reparto</label>
         <div style={{ display: 'flex', gap: 6 }}>

@@ -13,12 +13,28 @@ function getWeekNumber(dateStr: string): number {
   return Math.ceil((((d.getTime() - jan1.getTime()) / 86400000) + jan1.getDay() + 1) / 7)
 }
 
-function shouldInclude(frecuencia: string, fecha: string): boolean {
+function shouldInclude(frecuencia: string, fecha: string, fechaInicioAlternos?: string): boolean {
   if (!frecuencia || frecuencia === 'todos') return true
   const week = getWeekNumber(fecha)
-  if (frecuencia === 'si_no') return week % 2 === 1
   if (frecuencia === 'semanas_impares') return week % 2 === 1
   if (frecuencia === 'semanas_pares') return week % 2 === 0
+  if (frecuencia === 'si_no') {
+    // Día sí, día no — basado en la fecha de inicio real del habitual
+    // Si hay fecha de inicio: contar días desde esa fecha
+    // Si no: usar día del año como referencia
+    if (fechaInicioAlternos) {
+      const ref = new Date(fechaInicioAlternos + 'T12:00:00')
+      const hoy = new Date(fecha + 'T12:00:00')
+      const diffDias = Math.round((hoy.getTime() - ref.getTime()) / 86400000)
+      return diffDias % 2 === 0  // día 0, 2, 4... = toca
+    } else {
+      // Sin fecha de referencia: usar número de día del año
+      const d = new Date(fecha + 'T12:00:00')
+      const jan1 = new Date(d.getFullYear(), 0, 1)
+      const dayOfYear = Math.ceil((d.getTime() - jan1.getTime()) / 86400000)
+      return dayOfYear % 2 === 0
+    }
+  }
   return true
 }
 
@@ -129,7 +145,7 @@ export default function Pedidos() {
 
         const inserts = modsDia
           .filter(m => !clientesSusp.has(m.cliente_id))
-          .filter(m => shouldInclude(m.frecuencia, fechaDia))
+          .filter(m => shouldInclude(m.frecuencia, fechaDia, m.fecha_inicio_alternos))
           .map(m => ({
             user_id: user.id, fecha: fechaDia,
             cliente_id: m.cliente_id, producto_id: m.producto_id,
@@ -172,7 +188,7 @@ export default function Pedidos() {
       await supabase.from('pedidos').delete().eq('fecha', fecha).eq('user_id', user.id)
       const { data: susps } = await supabase.from('suspensiones_pedido').select('cliente_id').lte('fecha_inicio', fecha).gte('fecha_fin', fecha)
       const clientesSusp = new Set((susps || []).map((s: any) => s.cliente_id))
-      const inserts = mods.filter(m => m.cantidad > 0).filter(m => !clientesSusp.has(m.cliente_id)).filter(m => shouldInclude(m.frecuencia, fecha))
+      const inserts = mods.filter(m => m.cantidad > 0).filter(m => !clientesSusp.has(m.cliente_id)).filter(m => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
         .map(m => ({ user_id: user.id, fecha, cliente_id: m.cliente_id, producto_id: m.producto_id, cantidad: m.cantidad, precio: Number(m.productos?.precio_sin_iva || 0), iva: Number(m.productos?.iva || 4) }))
       if (inserts.length > 0) await supabase.from('pedidos').insert(inserts)
       const omitidos = new Set(mods.filter(m => clientesSusp.has(m.cliente_id)).map(m => m.cliente_id)).size
