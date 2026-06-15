@@ -74,6 +74,9 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;padding:48px 56px 48px 56px;c
 .box-title{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#E8670A;font-weight:900;display:block;margin-bottom:8px;border-bottom:1px solid #f5e8d8;padding-bottom:6px}
 .box p{font-size:0.82rem;color:#333;margin-bottom:2px}
 .box strong{color:#1a1a1a;font-size:0.88rem}
+.cif-line{font-size:0.75rem;color:#E8670A;font-weight:800;margin-top:2px}
+.centro-line{font-size:0.8rem;color:#3d1a00;font-weight:800;margin-top:8px;border-top:1px dashed #f5e8d8;padding-top:8px}
+.fiscal-addr{font-size:0.75rem;color:#777;margin-top:3px;line-height:1.6}
 table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:0.84rem}
 thead th{background:#E8670A;color:white;padding:9px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;font-weight:800;letter-spacing:0.05em}
 thead th:last-child{text-align:right}
@@ -112,11 +115,25 @@ tbody tr:nth-child(even){background:#fffaf6}
 <div class="datos-grid">
   <div class="box">
     <span class="box-title">📋 Datos del cliente</span>
-    <strong>${c?.nombre || ''}</strong>
-    <div style="font-size:0.75rem;color:#777;margin-top:3px;line-height:1.6">
+    ${c?.tipo_cliente === 'empresa' ? `
+    <strong>${c?.razon_social || c?.nombre || ''}</strong>
+    ${c?.cif ? `<div class="cif-line">CIF: ${c.cif}</div>` : ''}
+    <div class="fiscal-addr">
+      ${c?.direccion_fiscal || c?.direccion || ''}<br>
+      ${c?.cp_fiscal || c?.codigo_postal || ''} ${c?.poblacion_fiscal || c?.poblacion || ''}${c?.provincia_fiscal ? ` (${c.provincia_fiscal})` : ''}
+    </div>
+    <div class="centro-line">${c?.nombre || ''}</div>
+    <div class="fiscal-addr">
       ${c?.direccion || ''}<br>
       ${c?.codigo_postal || ''} ${c?.poblacion || ''}
     </div>
+    ` : `
+    <strong>${c?.nombre || ''}</strong>
+    <div class="fiscal-addr">
+      ${c?.direccion || ''}<br>
+      ${c?.codigo_postal || ''} ${c?.poblacion || ''}
+    </div>
+    `}
   </div>
   <div class="box">
     <span class="box-title">🧾 Datos de factura</span>
@@ -230,7 +247,7 @@ export default function Facturas() {
 
   const load = async () => {
     const { data } = await supabase.from('facturas')
-      .select('*, clientes(nombre, direccion, codigo_postal, poblacion, forma_pago, telefono1)')
+      .select('*, clientes(nombre, direccion, codigo_postal, poblacion, forma_pago, telefono1, tipo_cliente, razon_social, cif, direccion_fiscal, cp_fiscal, poblacion_fiscal, provincia_fiscal)')
       .eq('mes', `${anio}-${mesNum}`).order('numero')
     if (data) setFacturas(data)
   }
