@@ -46,7 +46,12 @@ const CAT_EMOJI: Record<string, string> = {
 export default function Pedidos() {
   const { user } = useAuth()
   const today = new Date().toISOString().split('T')[0]
-  const [fecha, setFecha] = useState(today)
+  const [fecha, setFechaState] = useState(() => localStorage.getItem('telepan_fecha_pedidos') || today)
+
+  const setFecha = (f: string) => {
+    setFechaState(f)
+    localStorage.setItem('telepan_fecha_pedidos', f)
+  }
   const [pedidos, setPedidos] = useState<any[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [productos, setProductos] = useState<any[]>([])
@@ -890,7 +895,39 @@ export default function Pedidos() {
                       <button className="btn btn-success btn-sm" onClick={async () => {
                         if (!confirm(`¿Reanudar pedidos de ${s.clientes?.nombre}?`)) return
                         await supabase.from('suspensiones_pedido').delete().eq('id', s.id)
-                        globalToast('✅ Reanudado'); load()
+                        globalToast('✅ Reanudado')
+                        // Si la suspensión cubría la fecha actual, regenerar pedidos de ese cliente para hoy
+                        const hoy = fecha
+                        if (s.fecha_inicio <= hoy && s.fecha_fin >= hoy && user) {
+                          // Cargar habituales del cliente para hoy
+                          const dayOfWeek = new Date(hoy + 'T12:00:00').getDay()
+                          const { data: mods } = await supabase
+                            .from('pedidos_modelo')
+                            .select('*, productos(precio_sin_iva, iva)')
+                            .eq('cliente_id', s.cliente_id)
+                            .eq('dia_semana', dayOfWeek)
+                          if (mods && mods.length > 0) {
+                            const validos = mods
+                              .filter((m: any) => m.cantidad > 0)
+                              .filter((m: any) => shouldInclude(m.frecuencia, hoy, m.fecha_inicio_alternos))
+                            if (validos.length > 0) {
+                              const inserts = validos.map((m: any) => ({
+                                user_id: user.id, fecha: hoy,
+                                cliente_id: m.cliente_id, producto_id: m.producto_id,
+                                cantidad: m.cantidad,
+                                precio: Number(m.productos?.precio_sin_iva || 0),
+                                iva: Number(m.productos?.iva || 4)
+                              }))
+                              await supabase.from('pedidos').insert(inserts)
+                              globalToast('✅ Reanudado — pedido de hoy añadido automáticamente')
+                            } else {
+                              globalToast('✅ Reanudado — hoy no le tocaba pedido según habituales')
+                            }
+                          } else {
+                            globalToast('✅ Reanudado — sin habituales configurados para hoy')
+                          }
+                        }
+                        load()
                       }}>✅ Reanudar</button>
                     </div>
                   )}
