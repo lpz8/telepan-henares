@@ -67,6 +67,7 @@ export default function PedidosModelo() {
   // Modal suspensión
   const [openSusp, setOpenSusp] = useState(false)
   const [suspCId, setSuspCId] = useState('')
+  const [suspExistente, setSuspExistente] = useState<any>(null)
   const [suspCNombre, setSuspCNombre] = useState('')
   const [suspInicio, setSuspInicio] = useState('')
   const [suspFin, setSuspFin] = useState('')
@@ -323,10 +324,15 @@ export default function PedidosModelo() {
 
     // Comprobar si ya existe suspensión activa para este cliente
     const { data: existing } = await supabase.from('suspensiones_pedido')
-      .select('id').eq('cliente_id', suspCId).gte('fecha_fin', today)
+      .select('id, fecha_inicio, fecha_fin, motivo').eq('cliente_id', suspCId)
     if (existing && existing.length > 0) {
-      if (!confirm('Este cliente ya tiene una suspensión activa.\n¿Quieres SUSTITUIRLA por la nueva?')) return
-      await supabase.from('suspensiones_pedido').delete().eq('cliente_id', suspCId).gte('fecha_fin', today)
+      const s = existing[0]
+      const msg = 'Este cliente ya tiene una suspensión guardada:\n' +
+        'Desde: ' + s.fecha_inicio + '  Hasta: ' + s.fecha_fin + '\n' +
+        'Motivo: ' + (s.motivo || '—') + '\n\n' +
+        '¿Quieres SUSTITUIRLA por la nueva?'
+      if (!confirm(msg)) return
+      await supabase.from('suspensiones_pedido').delete().eq('cliente_id', suspCId)
     }
 
     // Guardar nueva suspensión
@@ -354,7 +360,7 @@ export default function PedidosModelo() {
   }
 
   const deleteSusp = async (cId: string) => {
-    await supabase.from('suspensiones_pedido').delete().eq('cliente_id', cId).gte('fecha_fin', today)
+    await supabase.from('suspensiones_pedido').delete().eq('cliente_id', cId)
     globalToast('✅ Pedidos reanudados')
     setSuspRefresh(n => n + 1)
   }
@@ -688,7 +694,15 @@ export default function PedidosModelo() {
                         ) : (
                           <button className="btn btn-secondary btn-sm"
                             style={{ background: suspensiones.some(s => s.cliente_id === clienteId) ? '#fef3c7' : '', color: suspensiones.some(s => s.cliente_id === clienteId) ? '#92400e' : '' }}
-                            onClick={e => { e.stopPropagation(); setSuspCId(clienteId); setSuspCNombre(cliente.nombre); setOpenSusp(true) }}>
+                            onClick={async e => {
+  e.stopPropagation()
+  setSuspCId(clienteId); setSuspCNombre(cliente.nombre)
+  setSuspInicio(''); setSuspFin(''); setSuspMotivo('Vacaciones')
+  // Check if already has a suspension
+  const { data: ex } = await supabase.from('suspensiones_pedido').select('*').eq('cliente_id', clienteId)
+  setSuspExistente(ex && ex.length > 0 ? ex[0] : null)
+  setOpenSusp(true)
+}}>
                             <Calendar size={12} /> {suspensiones.some(s => s.cliente_id === clienteId) ? '⚠️ Modificar susp.' : 'Suspender'}
                           </button>
                         )}
@@ -864,6 +878,29 @@ export default function PedidosModelo() {
                 <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6 }} />
                 <strong>{suspCNombre}</strong> — Sin pedidos durante el periodo indicado.
               </div>
+              {suspExistente && (
+                <div style={{ background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>⚠️ Este cliente ya tiene una suspensión guardada</div>
+                  <div style={{ fontSize: '0.85rem', color: '#78350f' }}>
+                    📅 Desde <strong>{suspExistente.fecha_inicio}</strong> hasta <strong>{suspExistente.fecha_fin}</strong><br/>
+                    Motivo: <strong>{suspExistente.motivo}</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button className="btn btn-success btn-sm" onClick={async () => {
+                      await supabase.from('suspensiones_pedido').delete().eq('id', suspExistente.id)
+                      globalToast('✅ Suspensión eliminada — pedidos reanudados')
+                      setSuspExistente(null); setOpenSusp(false)
+                      setSuspRefresh(n => n + 1)
+                    }}>✅ Eliminar suspensión</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => {
+                      setSuspInicio(suspExistente.fecha_inicio)
+                      setSuspFin(suspExistente.fecha_fin)
+                      setSuspMotivo(suspExistente.motivo)
+                      setSuspExistente(null)
+                    }}>✏️ Modificar fechas</button>
+                  </div>
+                </div>
+              )}
               <div className="input-group">
                 <label className="input-label">Motivo</label>
                 <select className="select" value={suspMotivo} onChange={e => setSuspMotivo(e.target.value)}>
