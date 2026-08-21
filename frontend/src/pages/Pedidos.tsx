@@ -573,11 +573,9 @@ export default function Pedidos() {
                         <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.88rem' }}>{cliente?.nombre}</strong>
                         {susp && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>⏸ SUSPENDIDO</span>}
                         {tienesCambios && !susp && (() => {
-                          const cambio = cambiosDelDia.find(c => c.clienteId === clienteId)
-                          const tipo = cambio?.tipo
-                          if (tipo === 'manual') return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ AÑADIDO</span>
-                          if (tipo === 'añadido') return <span style={{ background: '#f0fdf4', color: '#16a34a', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ PRODUCTO AÑADIDO</span>
-                          if (tipo === 'eliminado') return <span style={{ background: '#fef2f2', color: '#dc2626', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>🗑️ PRODUCTO QUITADO</span>
+                          const misCambios = cambiosDelDia.filter(c => c.clienteId === clienteId)
+                          const tipos = misCambios.map(c => c.tipo)
+                          if (tipos.includes('manual')) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO</span>
                           return <span style={{ background: '#fff8f0', color: '#E8670A', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>✏️ MODIFICADO</span>
                         })()}
                       </div>
