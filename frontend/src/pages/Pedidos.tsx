@@ -575,8 +575,10 @@ export default function Pedidos() {
                         {tienesCambios && !susp && (() => {
                           const misCambios = cambiosDelDia.filter(c => c.clienteId === clienteId)
                           const tipos = misCambios.map(c => c.tipo)
-                          if (tipos.includes('manual')) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO</span>
-                          return <span style={{ background: '#fff8f0', color: '#E8670A', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>✏️ MODIFICADO</span>
+                          const esManual = tipos.includes('manual')
+                          const tieneHabitual = modelos.some(m => m.cliente_id === clienteId)
+                          if (esManual && !tieneHabitual) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO</span>
+                          return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO · ✏️ MODIFICADO</span>
                         })()}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--gris)' }}>{cliente?.poblacion} · {items.length} producto{items.length !== 1 ? 's' : ''}</div>
