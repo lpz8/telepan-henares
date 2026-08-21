@@ -47,9 +47,7 @@ export default function Pedidos() {
   const { user } = useAuth()
   const today = new Date().toISOString().split('T')[0]
   const [fecha, setFechaState] = useState(() => localStorage.getItem('telepan_fecha_pedidos') || today)
-  const [generadosHoy, setGeneradosHoy] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('telepan_generados_' + (localStorage.getItem('telepan_fecha_pedidos') || today)) || '[]')) } catch { return new Set() }
-  })
+  const [generadosHoy, setGeneradosHoy] = useState<Set<string>>(new Set())
 
   const setFecha = (f: string) => {
     setFechaState(f)
@@ -92,6 +90,17 @@ export default function Pedidos() {
       .from('pedidos_modelo').select('*, productos(nombre, precio_sin_iva, iva)')
       .eq('dia_semana', dayOfWeek)
     setModelos(mods || [])
+
+    // Calcular qué clientes DEBERÍAN haberse generado automáticamente
+    const suspIds = new Set((susps || []).map((s: any) => s.cliente_id))
+    const esperados = new Set(
+      (mods || [])
+        .filter((m: any) => m.cantidad > 0)
+        .filter((m: any) => !suspIds.has(m.cliente_id))
+        .filter((m: any) => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
+        .map((m: any) => m.cliente_id)
+    )
+    setGeneradosHoy(esperados)
   }
 
   useEffect(() => { load() }, [fecha])
