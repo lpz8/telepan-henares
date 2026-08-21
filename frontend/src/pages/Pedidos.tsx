@@ -92,15 +92,22 @@ export default function Pedidos() {
     setModelos(mods || [])
 
     // Calcular qué clientes DEBERÍAN haberse generado automáticamente
-    const suspIds = new Set((susps || []).map((s: any) => s.cliente_id))
-    const esperados = new Set(
-      (mods || [])
-        .filter((m: any) => m.cantidad > 0)
-        .filter((m: any) => !suspIds.has(m.cliente_id))
-        .filter((m: any) => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
-        .map((m: any) => m.cliente_id)
-    )
-    setGeneradosHoy(esperados)
+    // Primero mirar localStorage (más fiable - guardado en el momento de generación)
+    const saved = localStorage.getItem('telepan_generados_' + fecha)
+    if (saved) {
+      setGeneradosHoy(new Set(JSON.parse(saved)))
+    } else {
+      // Fallback: calcular desde datos actuales
+      const suspIds = new Set((susps || []).map((s: any) => s.cliente_id))
+      const esperados = new Set(
+        (mods || [])
+          .filter((m: any) => m.cantidad > 0)
+          .filter((m: any) => !suspIds.has(m.cliente_id))
+          .filter((m: any) => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
+          .map((m: any) => m.cliente_id)
+      )
+      setGeneradosHoy(esperados)
+    }
   }
 
   useEffect(() => { load() }, [fecha])
