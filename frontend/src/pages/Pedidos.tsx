@@ -47,6 +47,9 @@ export default function Pedidos() {
   const { user } = useAuth()
   const today = new Date().toISOString().split('T')[0]
   const [fecha, setFechaState] = useState(() => localStorage.getItem('telepan_fecha_pedidos') || today)
+  const [generadosHoy, setGeneradosHoy] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('telepan_generados_' + (localStorage.getItem('telepan_fecha_pedidos') || today)) || '[]')) } catch { return new Set() }
+  })
 
   const setFecha = (f: string) => {
     setFechaState(f)
@@ -196,6 +199,9 @@ export default function Pedidos() {
       const inserts = mods.filter(m => m.cantidad > 0).filter(m => !clientesSusp.has(m.cliente_id)).filter(m => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
         .map(m => ({ user_id: user.id, fecha, cliente_id: m.cliente_id, producto_id: m.producto_id, cantidad: m.cantidad, precio: Number(m.productos?.precio_sin_iva || 0), iva: Number(m.productos?.iva || 4) }))
       if (inserts.length > 0) await supabase.from('pedidos').insert(inserts)
+      const generadosIds = [...new Set(inserts.map((i: any) => i.cliente_id))]
+      localStorage.setItem('telepan_generados_' + fecha, JSON.stringify(generadosIds))
+      setGeneradosHoy(new Set(generadosIds))
       const omitidos = new Set(mods.filter(m => clientesSusp.has(m.cliente_id)).map(m => m.cliente_id)).size
       globalToast(`✅ ${inserts.length} pedidos generados${omitidos > 0 ? ` · ${omitidos} suspendidos omitidos` : ''}`)
       load()
@@ -577,8 +583,10 @@ export default function Pedidos() {
                           const tipos = misCambios.map(c => c.tipo)
                           const esManual = tipos.includes('manual')
                           const tieneHabitual = modelos.some(m => m.cliente_id === clienteId)
+                          // Cliente no estaba en los generados automáticamente
+                          const noGenerado = !generadosHoy.has(clienteId)
+                          if (noGenerado && tieneHabitual) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO · ✏️ MODIFICADO</span>
                           if (esManual && !tieneHabitual) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO</span>
-                          if (esManual && tieneHabitual) return <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>➕ CLIENTE AÑADIDO · ✏️ MODIFICADO</span>
                           return <span style={{ background: '#fff8f0', color: '#E8670A', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>✏️ CLIENTE MODIFICADO</span>
                         })()}
                       </div>
