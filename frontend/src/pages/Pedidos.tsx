@@ -295,6 +295,9 @@ export default function Pedidos() {
       } else if (up.includes('ARTESANA')) {
         if (!totales['__ARTESANA__']) totales['__ARTESANA__'] = { nombre: 'ARTESANA (todas)', cantidad: 0, esAgrupado: true, grupo: 'artesana' }
         totales['__ARTESANA__'].cantidad += cantidad
+      } else if (up.includes('CRUDA')) {
+        if (!totales['__CRUDA__']) totales['__CRUDA__'] = { nombre: 'CRUDA 200GR (todas)', cantidad: 0, esAgrupado: true, grupo: 'cruda' }
+        totales['__CRUDA__'].cantidad += cantidad
       } else { if (!totales[up]) totales[up] = { nombre, cantidad: 0 }; totales[up].cantidad += cantidad }
     })
     return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
@@ -315,6 +318,9 @@ export default function Pedidos() {
       } else if (cat === 'Pan' && up.includes('ARTESANA')) {
         if (!totales['__ARTESANA__']) totales['__ARTESANA__'] = { nombre: 'ARTESANA (todas)', cantidad: 0, esAgrupado: true, grupo: 'artesana' }
         totales['__ARTESANA__'].cantidad += cantidad
+      } else if (up.includes('CRUDA')) {
+        if (!totales['__CRUDA__']) totales['__CRUDA__'] = { nombre: 'CRUDA 200GR (todas)', cantidad: 0, esAgrupado: true, grupo: 'cruda' }
+        totales['__CRUDA__'].cantidad += cantidad
       } else { if (!totales[up]) totales[up] = { nombre, cantidad: 0 }; totales[up].cantidad += cantidad }
     })
     return Object.values(totales).sort((a, b) => b.cantidad - a.cantidad)
@@ -431,6 +437,7 @@ export default function Pedidos() {
                     const matches = a.esAgrupado
                       ? (a.grupo === 'barra' ? (n.includes('CASA') || n.includes('PISTOLA'))
                         : a.grupo === 'artesana' ? n.includes('ARTESANA')
+                        : a.grupo === 'cruda' ? n.includes('CRUDA')
                         : n.includes('PICO'))
                       : n === a.nombre.toUpperCase()
                     if (matches) {
@@ -448,15 +455,15 @@ export default function Pedidos() {
                   onMouseEnter={e => (e.currentTarget.style.background = '#fff3e8')}
                   onMouseLeave={e => (e.currentTarget.style.background = a.esAgrupado ? '#fff8f0' : '')}>
                   <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {a.esAgrupado && <span style={{ background: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : '#16a34a', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>{a.grupo === 'barra' ? 'CASA+PISTOLA' : a.grupo === 'artesana' ? 'ARTESANA' : 'PICOS'}</span>}
-                    <strong style={{ color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : 'var(--marron)' }}>{a.nombre}</strong>
+                    {a.esAgrupado && <span style={{ background: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'cruda' ? '#0891b2' : '#16a34a', color: 'white', borderRadius: 5, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 800 }}>{a.grupo === 'barra' ? 'CASA+PISTOLA' : a.grupo === 'artesana' ? 'ARTESANA' : a.grupo === 'cruda' ? 'CRUDA' : 'PICOS'}</span>}
+                    <strong style={{ color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : a.grupo === 'cruda' ? '#0891b2' : 'var(--marron)' }}>{a.nombre}</strong>
                     <span style={{ fontSize: '0.7rem', color: 'var(--gris)', marginLeft: 4 }}>👆 {clientesQueOrdenaron.length} clientes</span>
                   </div></td>
-                  <td style={{ textAlign: 'center' }}><span style={{ fontFamily: 'Fredoka One', fontSize: '1.6rem', color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : '#2563eb' }}>{a.cantidad}</span></td>
+                  <td style={{ textAlign: 'center' }}><span style={{ fontFamily: 'Fredoka One', fontSize: '1.6rem', color: a.grupo === 'barra' ? 'var(--naranja)' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'picos' ? '#16a34a' : a.grupo === 'cruda' ? '#0891b2' : '#2563eb' }}>{a.cantidad}</span></td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                       <div style={{ width: 80, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
-                        <div style={{ width: `${total > 0 ? a.cantidad / total * 100 : 0}%`, height: '100%', background: a.grupo === 'barra' ? '#E8670A' : a.grupo === 'artesana' ? '#7c3aed' : '#2563eb', borderRadius: 4 }} />
+                        <div style={{ width: `${total > 0 ? a.cantidad / total * 100 : 0}%`, height: '100%', background: a.grupo === 'barra' ? '#E8670A' : a.grupo === 'artesana' ? '#7c3aed' : a.grupo === 'cruda' ? '#0891b2' : '#2563eb', borderRadius: 4 }} />
                       </div>
                       <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--gris)' }}>{total > 0 ? (a.cantidad / total * 100).toFixed(1) : 0}%</span>
                     </div>
