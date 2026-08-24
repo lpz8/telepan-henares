@@ -67,7 +67,9 @@ export default function Pedidos() {
   const [ordenPorRuta, setOrdenPorRuta] = useState(true)
   const [openSuspModal, setOpenSuspModal] = useState(false)
   const [editSusp, setEditSusp] = useState<any>(null)
-  const [resumenDetalle, setResumenDetalle] = useState<{ nombre: string; clientes: { nombre: string; codigo: string; cantidad: number; total: number }[] } | null>(null)
+  const [resumenDetalle, setResumenDetalle] = useState<{ nombre: string; clientes: { nombre: string; codigo: string; cantidad: number; total: number; orden_ruta?: number }[] } | null>(null)
+  const [ordenDetalleRuta, setOrdenDetalleRuta] = useState(true)
+  const [busqDetalle, setBusqDetalle] = useState('')
   const [editCliente, setEditCliente] = useState<{
     id: string; nombre: string; lineas: any[]
     _productoAdd?: string; _cantidadAdd?: number
@@ -95,7 +97,7 @@ export default function Pedidos() {
     // Primero mirar localStorage (más fiable - guardado en el momento de generación)
     const saved = localStorage.getItem('telepan_generados_' + fecha)
     if (saved) {
-      setGeneradosHoy(new Set(JSON.parse(saved)))
+      setGeneradosHoy(new Set<string>(JSON.parse(saved)))
     } else {
       // Fallback: calcular desde datos actuales
       const suspIds = new Set((susps || []).map((s: any) => s.cliente_id))
@@ -106,7 +108,7 @@ export default function Pedidos() {
           .filter((m: any) => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
           .map((m: any) => m.cliente_id)
       )
-      setGeneradosHoy(esperados)
+      setGeneradosHoy(esperados as Set<string>)
     }
   }
 
@@ -215,9 +217,9 @@ export default function Pedidos() {
       const inserts = mods.filter(m => m.cantidad > 0).filter(m => !clientesSusp.has(m.cliente_id)).filter(m => shouldInclude(m.frecuencia, fecha, m.fecha_inicio_alternos))
         .map(m => ({ user_id: user.id, fecha, cliente_id: m.cliente_id, producto_id: m.producto_id, cantidad: m.cantidad, precio: Number(m.productos?.precio_sin_iva || 0), iva: Number(m.productos?.iva || 4) }))
       if (inserts.length > 0) await supabase.from('pedidos').insert(inserts)
-      const generadosIds = [...new Set(inserts.map((i: any) => i.cliente_id))]
+      const generadosIds: string[] = [...new Set<string>(inserts.map((i: any) => i.cliente_id as string))]
       localStorage.setItem('telepan_generados_' + fecha, JSON.stringify(generadosIds))
-      setGeneradosHoy(new Set(generadosIds))
+      setGeneradosHoy(new Set<string>(generadosIds))
       const omitidos = new Set(mods.filter(m => clientesSusp.has(m.cliente_id)).map(m => m.cliente_id)).size
       globalToast(`✅ ${inserts.length} pedidos generados${omitidos > 0 ? ` · ${omitidos} suspendidos omitidos` : ''}`)
       load()
@@ -421,7 +423,7 @@ export default function Pedidos() {
             {arts.map((a, i) => {
               // Calcular qué clientes pidieron este artículo
               const clientesQueOrdenaron = (() => {
-                const result: { nombre: string; codigo: string; cantidad: number; total: number }[] = []
+                const result: { nombre: string; codigo: string; cantidad: number; total: number; orden_ruta?: number }[] = []
                 Object.entries(grouped).forEach(([, { cliente, items }]: any) => {
                   let cant = 0; let tot = 0
                   items.forEach((p: any) => {
@@ -436,9 +438,9 @@ export default function Pedidos() {
                       tot += Number(p.cantidad) * Number(p.precio) * (1 + Number(p.iva) / 100)
                     }
                   })
-                  if (cant > 0) result.push({ nombre: cliente?.nombre, codigo: cliente?.codigo, cantidad: cant, total: tot })
+                  if (cant > 0) result.push({ nombre: cliente?.nombre, codigo: cliente?.codigo, cantidad: cant, total: tot, orden_ruta: cliente?.orden_ruta ?? 9999 })
                 })
-                return result.sort((a, b) => b.cantidad - a.cantidad)
+                return result.sort((a, b) => a.orden_ruta - b.orden_ruta)
               })()
               return (
                 <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '', cursor: 'pointer' }}
@@ -658,17 +660,31 @@ export default function Pedidos() {
           <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h3 className="modal-title">👆 {resumenDetalle.nombre}</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setResumenDetalle(null)}><X size={16} /></button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button className={`btn btn-sm ${ordenDetalleRuta ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setOrdenDetalleRuta(true)} title="Ordenar por ruta">
+                  🗺️ Ruta
+                </button>
+                <button className={`btn btn-sm ${!ordenDetalleRuta ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setOrdenDetalleRuta(false)} title="Ordenar por cantidad">
+                  📊 Cantidad
+                </button>
+                <button className="btn btn-secondary btn-icon" onClick={() => { setResumenDetalle(null); setBusqDetalle('') }}><X size={16} /></button>
+              </div>
             </div>
             <div className="modal-body">
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
                 📋 <strong>{resumenDetalle.clientes.length} clientes</strong> pidieron este producto hoy —{' '}
                 <strong>{resumenDetalle.clientes.reduce((s, c) => s + c.cantidad, 0)} unidades</strong> en total
               </div>
+              <input className="input" placeholder="🔍 Buscar cliente..."
+                value={busqDetalle} onChange={e => setBusqDetalle(e.target.value)}
+                style={{ marginBottom: 10 }} />
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
+                      <th style={{ textAlign: 'center' }}>Ruta</th>
                       <th>Cliente</th>
                       <th style={{ textAlign: 'center' }}>Uds</th>
                       <th style={{ textAlign: 'right' }}>Total</th>
@@ -676,8 +692,16 @@ export default function Pedidos() {
                     </tr>
                   </thead>
                   <tbody>
-                    {resumenDetalle.clientes.map((c, i) => (
+                    {[...resumenDetalle.clientes]
+                      .filter(c => !busqDetalle.trim() || c.nombre?.toLowerCase().includes(busqDetalle.toLowerCase()))
+                      .sort((a, b) => ordenDetalleRuta
+                        ? (a.orden_ruta ?? 9999) - (b.orden_ruta ?? 9999)
+                        : b.cantidad - a.cantidad)
+                      .map((c, i) => (
                       <tr key={i}>
+                        <td style={{ textAlign: 'center', fontFamily: 'Fredoka One', color: 'var(--naranja)' }}>
+                          {c.orden_ruta ?? '—'}
+                        </td>
                         <td>
                           <div style={{ fontWeight: 800, color: 'var(--marron)' }}>{c.nombre}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--gris)' }}>#{c.codigo}</div>
@@ -707,7 +731,7 @@ export default function Pedidos() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setResumenDetalle(null)}>Cerrar</button>
+              <button className="btn btn-secondary" onClick={() => { setResumenDetalle(null); setBusqDetalle('') }}>Cerrar</button>
             </div>
           </div>
         </div>
