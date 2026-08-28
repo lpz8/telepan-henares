@@ -18,6 +18,7 @@ import IAFacturas from './pages/IAFacturas'
 import Rutas from './pages/Rutas'
 import Backup from './pages/Backup'
 import Publicidad from './pages/Publicidad'
+import Catalogo from './pages/Catalogo'
 
 function PrivateRoutes() {
   const { user, loading } = useAuth()
@@ -47,6 +48,7 @@ function PrivateRoutes() {
         <Route path="/rutas" element={<Rutas />} />
         <Route path="/backup" element={<Backup />} />
         <Route path="/publicidad" element={<Publicidad />} />
+        <Route path="/catalogo" element={<Catalogo />} />
       </Route>
     </Routes>
   )
