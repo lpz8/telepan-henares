@@ -100,80 +100,76 @@ export default function Catalogo() {
     const cardsHTML = porCat.map(cat => {
       const color = CAT_COLORS[cat] || '#E8670A'
       const catItems = activos.filter(i => i.categoria === cat)
-      const emojis: Record<string,string> = { 'Bolleria': 'Bolleria', 'Tartas': 'Tartas', 'Especiales': 'Especiales', 'Bandejas': 'Bandejas', 'Rincon Gallego': 'Rincon Gallego', 'Especial Fin de Semana': 'Especial Fin de Semana' }
       const itemsHTML = catItems.map(item => [
         '<div class="card-art">',
-          '<div class="card-img" style="background:' + color + '15">',
-            item.foto_base64 ? '<img src="' + item.foto_base64 + '" alt="' + item.nombre + '"/>' : '<div class="card-img-placeholder" style="background:' + color + '22"><span style="font-size:2rem;color:' + color + '66">pan</span></div>',
+          '<div class="card-img" style="background:' + color + '12">',
+            item.foto_base64 ? '<img src="' + item.foto_base64 + '" alt="' + item.nombre + '"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem">pan</div>',
           '</div>',
           '<div class="card-body">',
-            '<div class="card-badge" style="background:' + color + '22;color:' + color + '">' + emojis[cat] + '</div>',
             '<div class="card-nombre">' + item.nombre + '</div>',
             item.descripcion ? '<div class="card-desc">' + item.descripcion + '</div>' : '',
             item.solo_finde ? '<div class="card-finde">Solo fin de semana</div>' : '',
-            '<div class="card-precio" style="color:' + color + '">' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar')) + '</div>',
+            '<div class="card-precio" style="color:' + color + '">' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' €' : 'Consultar precio')) + '</div>',
           '</div>',
         '</div>'
       ].join(''))
       return [
         '<div class="seccion">',
-          '<div class="sec-header" style="background:linear-gradient(135deg,' + color + ',' + color + 'cc);border-left:6px solid ' + color + 'aa">',
-            '<div class="sec-titulo">' + cat.toUpperCase() + '</div>',
-            '<div class="sec-count">' + catItems.length + ' articulos</div>',
+          '<div class="sec-header" style="background:linear-gradient(135deg,' + color + 'ee,' + color + '99)">',
+            '<div class="sec-titulo">' + cat + '</div>',
+            '<div class="sec-count">' + catItems.length + (catItems.length === 1 ? ' articulo' : ' articulos') + '</div>',
           '</div>',
           '<div class="cards-grid">' + itemsHTML.join('') + '</div>',
         '</div>'
       ].join('')
     }).join('')
 
+    const css = [
+      '*{box-sizing:border-box;margin:0;padding:0}',
+      'body{font-family:Nunito,Arial,sans-serif;background:#fdf8f3;color:#2a1500;width:900px}',
+      '.portada{background:linear-gradient(150deg,#3d1a06 0%,#5a2d0c 35%,#E8670A 80%,#f59e0b 100%);padding:36px 50px 32px;position:relative;overflow:hidden}',
+      '.portada::before{content:"";position:absolute;top:-50px;right:-50px;width:200px;height:200px;background:rgba(255,255,255,0.06);border-radius:50%}',
+      '.portada::after{content:"";position:absolute;bottom:-30px;left:30px;width:100px;height:100px;background:rgba(255,255,255,0.04);border-radius:50%}',
+      '.portada-row{display:flex;align-items:center;gap:24px;position:relative;z-index:1}',
+      '.portada-logo{height:56px;width:auto;object-fit:contain}',
+      '.portada-divider{width:2px;height:60px;background:rgba(255,255,255,0.3);flex-shrink:0}',
+      '.portada-text h1{font-family:"Fredoka One",cursive;font-size:2.2rem;color:white;letter-spacing:-0.5px;text-shadow:0 2px 6px rgba(0,0,0,0.25)}',
+      '.portada-text .slogan{font-size:0.95rem;color:rgba(255,255,255,0.85);font-style:italic;margin-top:3px}',
+      '.portada-tel{display:inline-block;background:rgba(255,255,255,0.18);border:1.5px solid rgba(255,255,255,0.35);border-radius:20px;padding:5px 16px;margin-top:10px;font-size:0.88rem;font-weight:800;color:white;letter-spacing:0.3px}',
+      '.seccion{margin:18px 24px}',
+      '.sec-header{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-radius:10px 10px 0 0}',
+      '.sec-titulo{font-family:"Fredoka One",cursive;color:white;font-size:1.15rem;letter-spacing:0.3px}',
+      '.sec-count{color:rgba(255,255,255,0.75);font-size:0.75rem;font-weight:700}',
+      '.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);border:2px solid #f0e0d0;border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:white}',
+      '.card-art{border-right:1px solid #f5e8d8;border-bottom:1px solid #f5e8d8;display:flex;flex-direction:column}',
+      '.card-art:nth-child(3n){border-right:none}',
+      '.card-img{height:155px;overflow:hidden;display:flex;align-items:center;justify-content:center}',
+      '.card-img img{width:100%;height:100%;object-fit:cover}',
+      '.card-body{padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:3px}',
+      '.card-nombre{font-weight:900;font-size:0.92rem;color:#2a1500;line-height:1.3;margin-bottom:2px}',
+      '.card-desc{font-size:0.72rem;color:#999;line-height:1.4;flex:1}',
+      '.card-finde{font-size:0.65rem;color:#b45309;font-weight:800;background:#fef3c7;padding:2px 6px;border-radius:4px;display:inline-block;width:fit-content;margin-top:2px}',
+      '.card-precio{font-family:"Fredoka One",cursive;font-size:1.05rem;margin-top:5px;font-weight:400}',
+      '.cat-footer{text-align:center;padding:18px 24px;font-size:0.72rem;color:#bbb;border-top:2px solid #f0e0d0;margin-top:8px}',
+    ].join('')
+
     return '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
-      '<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">' +
-      '<style>' +
-      '*{box-sizing:border-box;margin:0;padding:0}' +
-      'body{font-family:Nunito,Arial,sans-serif;background:#fdf8f3;color:#2a1500;width:900px}' +
-      /* PORTADA */
-      '.portada{background:linear-gradient(160deg,#5a2d0c 0%,#E8670A 60%,#f59e0b 100%);color:white;padding:40px 50px 30px;position:relative;overflow:hidden;min-height:200px}' +
-      '.portada::before{content:"";position:absolute;top:-60px;right:-60px;width:220px;height:220px;background:rgba(255,255,255,0.07);border-radius:50%}' +
-      '.portada::after{content:"";position:absolute;bottom:-40px;left:40px;width:120px;height:120px;background:rgba(255,255,255,0.05);border-radius:50%}' +
-      '.portada-inner{display:flex;align-items:center;gap:28px;position:relative;z-index:1}' +
-      '.portada-logo{width:130px;height:50px;object-fit:contain;filter:brightness(0) invert(1);flex-shrink:0}' +
-      '.portada-text h1{font-family:"Fredoka One",cursive;font-size:2.4rem;letter-spacing:-0.5px;text-shadow:0 2px 8px rgba(0,0,0,0.2)}' +
-      '.portada-text .slogan{font-size:1rem;opacity:0.9;font-style:italic;margin-top:4px}' +
-      '.portada-text .tel{display:inline-block;background:rgba(255,255,255,0.2);border:2px solid rgba(255,255,255,0.4);border-radius:30px;padding:5px 18px;margin-top:10px;font-size:0.9rem;font-weight:800;letter-spacing:0.5px}' +
-      /* SECCIONES */
-      '.seccion{margin:22px 28px}' +
-      '.sec-header{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-radius:12px 12px 0 0}' +
-      '.sec-titulo{font-family:"Fredoka One",cursive;color:white;font-size:1.2rem;letter-spacing:0.5px}' +
-      '.sec-count{color:rgba(255,255,255,0.8);font-size:0.8rem;font-weight:700}' +
-      /* CARDS */
-      '.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);border:2px solid #f0e0d0;border-top:none;border-radius:0 0 12px 12px;overflow:hidden;background:white}' +
-      '.card-art{border-right:1px solid #f5e8d8;border-bottom:1px solid #f5e8d8;display:flex;flex-direction:column}' +
-      '.card-art:nth-child(3n){border-right:none}' +
-      '.card-img{height:160px;overflow:hidden;display:flex;align-items:center;justify-content:center}' +
-      '.card-img img{width:100%;height:100%;object-fit:cover}' +
-      '.card-img-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center}' +
-      '.card-body{padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:3px}' +
-      '.card-badge{font-size:0.6rem;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;display:inline-block;width:fit-content;margin-bottom:3px}' +
-      '.card-nombre{font-weight:900;font-size:0.9rem;color:#2a1500;line-height:1.3}' +
-      '.card-desc{font-size:0.72rem;color:#888;line-height:1.4;flex:1}' +
-      '.card-finde{font-size:0.68rem;color:#b45309;font-weight:800;background:#fef3c7;padding:2px 6px;border-radius:4px;display:inline-block;width:fit-content}' +
-      '.card-precio{font-family:"Fredoka One",cursive;font-size:1.05rem;margin-top:4px}' +
-      /* FOOTER */
-      '.cat-footer{text-align:center;padding:20px 28px;font-size:0.72rem;color:#bbb;border-top:2px solid #f0e0d0;margin-top:10px;background:#fdf8f3}' +
-      '.cat-footer strong{color:#E8670A}' +
-      '</style></head><body>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">' +
+      '<style>' + css + '</style>' +
+      '</head><body>' +
       '<div class="portada">' +
-        '<div class="portada-inner">' +
-          '<img src="' + LOGO_B64 + '" class="portada-logo" alt="TelePan Henares"/>' +
+        '<div class="portada-row">' +
+          '<img src="' + LOGO_B64 + '" class="portada-logo" alt="TelePan"/>' +
+          '<div class="portada-divider"></div>' +
           '<div class="portada-text">' +
             '<h1>' + EMISOR.nombre + '</h1>' +
             '<div class="slogan">"' + EMISOR.slogan + '"</div>' +
-            '<div class="tel">Tel: ' + EMISOR.telefono + '</div>' +
+            '<div class="portada-tel">Tel: ' + EMISOR.telefono + '</div>' +
           '</div>' +
         '</div>' +
       '</div>' +
       cardsHTML +
-      '<div class="cat-footer"><strong>' + EMISOR.nombre + '</strong> &middot; Tel: ' + EMISOR.telefono + ' &middot; Catalogo ' + new Date().getFullYear() + '</div>' +
+      '<div class="cat-footer">' + EMISOR.nombre + ' &middot; ' + EMISOR.telefono + ' &middot; Catalogo ' + new Date().getFullYear() + '</div>' +
       '</body></html>'
   }
 
@@ -233,7 +229,7 @@ export default function Catalogo() {
                 if (catItems.length === 0) return
                 lineas.push('--- ' + cat.toUpperCase() + ' ---')
                 catItems.forEach(item => {
-                  lineas.push(item.nombre + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar')))
+                  lineas.push(item.nombre + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' €' : 'Consultar')))
                   if (item.descripcion) lineas.push('  ' + item.descripcion)
                   if (item.solo_finde) lineas.push('  Solo disponible fin de semana')
                 })
@@ -291,7 +287,7 @@ export default function Catalogo() {
                 <div style={{ fontFamily: 'Fredoka One', fontSize: '1rem', color: 'var(--marron)', marginBottom: 4 }}>{item.nombre}</div>
                 {item.descripcion && <div style={{ fontSize: '0.78rem', color: 'var(--gris)', marginBottom: 6, lineHeight: 1.4 }}>{item.descripcion}</div>}
                 <div style={{ fontFamily: 'Fredoka One', fontSize: '1.1rem', color: CAT_COLORS[item.categoria] || 'var(--naranja)' }}>
-                  {item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar precio')}
+                  {item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' €' : 'Consultar precio')}
                 </div>
               </div>
               <div style={{ padding: '8px 14px 12px', borderTop: '1px solid #f5e8d8', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -304,7 +300,7 @@ export default function Catalogo() {
                 </button>
                 <button className="btn btn-sm" style={{ background: '#25D366', color: 'white', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800 }}
                   onClick={() => {
-                    const texto = item.nombre + (item.descripcion ? ' - ' + item.descripcion : '') + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar precio')) + (item.solo_finde ? ' (Solo fin de semana)' : '')
+                    const texto = item.nombre + (item.descripcion ? ' - ' + item.descripcion : '') + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' €' : 'Consultar precio')) + (item.solo_finde ? ' (Solo fin de semana)' : '')
                     window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank')
                   }}>WA</button>
                 <button className="btn btn-danger btn-sm btn-icon" style={{ marginLeft: 'auto' }} onClick={() => deleteItem(item.id)}><Trash2 size={14}/></button>
