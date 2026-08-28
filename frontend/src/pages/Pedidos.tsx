@@ -57,6 +57,11 @@ export default function Pedidos() {
   const [clientes, setClientes] = useState<any[]>([])
   const [productos, setProductos] = useState<any[]>([])
   const [modelos, setModelos] = useState<any[]>([])
+  const [catalogoItems, setCatalogoItems] = useState<any[]>([])
+  const [pedidosCatalogo, setPedidosCatalogo] = useState<any[]>([])
+  const [openCatalogo, setOpenCatalogo] = useState(false)
+  const [formCatalogo, setFormCatalogo] = useState({ cliente_id: '', catalogo_id: '', cantidad: 1 })
+  const [catTab, setCatTab] = useState<'Bolleria' | 'Otros'>('Bolleria')
   const [loading, setLoading] = useState(false)
   const [openManual, setOpenManual] = useState(false)
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
@@ -81,6 +86,16 @@ export default function Pedidos() {
       .select('*, clientes(nombre, codigo, orden_ruta, poblacion), productos(nombre, iva, categoria)')
       .eq('fecha', fecha).order('created_at')
     setPedidos(ped || [])
+
+    // Cargar artículos del catálogo
+    const { data: cats } = await supabase.from('catalogo').select('*').eq('activo', true).order('categoria').order('orden')
+    setCatalogoItems(cats || [])
+
+    // Cargar pedidos del catálogo del día
+    const { data: pedCat } = await supabase.from('pedidos')
+      .select('*, clientes(nombre, orden_ruta), catalogo(*)')
+      .eq('fecha', fecha).eq('es_catalogo', true)
+    setPedidosCatalogo(pedCat || [])
 
     const { data: susps } = await supabase
       .from('suspensiones_pedido').select('*, clientes(nombre, codigo)')
@@ -412,6 +427,27 @@ export default function Pedidos() {
     } catch(e: any) { globalToast('Error: ' + e.message, 'error') }
   }
 
+  const saveCatalogoOrder = async () => {
+    if (!user || !formCatalogo.cliente_id || !formCatalogo.catalogo_id) return globalToast('Selecciona cliente y artículo', 'error')
+    const item = catalogoItems.find(c => c.id === formCatalogo.catalogo_id)
+    if (!item) return
+    await supabase.from('pedidos').insert({
+      user_id: user.id, fecha, cliente_id: formCatalogo.cliente_id,
+      producto_id: null, catalogo_id: formCatalogo.catalogo_id,
+      cantidad: formCatalogo.cantidad, precio: item.precio || 0,
+      iva: 4, es_catalogo: true
+    })
+    globalToast('Pedido añadido')
+    setOpenCatalogo(false)
+    setFormCatalogo({ cliente_id: '', catalogo_id: '', cantidad: 1 })
+    load()
+  }
+
+  const deletePedidoCatalogo = async (id: string) => {
+    if (!confirm('¿Eliminar este pedido?')) return
+    await supabase.from('pedidos').delete().eq('id', id)
+    globalToast('Pedido eliminado'); load()
+  }
   const renderTabla = (arts: any[], total: number, titulo = 'Resumen') => (
     <div className="card" style={{ padding: 0 }}>
       <div style={{ padding: '12px 18px', borderBottom: '1px solid #f5e8d8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -449,6 +485,7 @@ export default function Pedidos() {
                 })
                 return result.sort((a, b) => a.orden_ruta - b.orden_ruta)
               })()
+
               return (
                 <tr key={i} style={{ background: a.esAgrupado ? '#fff8f0' : '', cursor: 'pointer' }}
                   onClick={() => setResumenDetalle({ nombre: a.nombre, clientes: clientesQueOrdenaron })}
@@ -523,6 +560,12 @@ export default function Pedidos() {
         </div>
         <div className={`tab ${tabActiva === 'resumen' ? 'active' : ''}`} onClick={() => setTabActiva('resumen')}>📦 Resumen ({totalResumen} ud)</div>
         {categoriasDelDia.map(cat => <div key={cat} className={`tab ${tabActiva === cat ? 'active' : ''}`} onClick={() => setTabActiva(cat)}>{CAT_EMOJI[cat]} {cat} ({resumenPorCategoria(cat).reduce((s, a) => s + a.cantidad, 0)} ud)</div>)}
+        <div className={`tab ${tabActiva === 'cat_bolleria' ? 'active' : ''}`} onClick={() => setTabActiva('cat_bolleria')}>
+          🥐 Bollería ({pedidosCatalogo.filter(p => p.catalogo?.categoria === 'Bolleria').reduce((s, p) => s + Number(p.cantidad), 0)} ud)
+        </div>
+        <div className={`tab ${tabActiva === 'cat_otros' ? 'active' : ''}`} onClick={() => setTabActiva('cat_otros')}>
+          🎁 Otros ({pedidosCatalogo.filter(p => p.catalogo?.categoria !== 'Bolleria').reduce((s, p) => s + Number(p.cantidad), 0)} ud)
+        </div>
       </div>
 
       {tabActiva === 'cambios' && (
@@ -573,6 +616,70 @@ export default function Pedidos() {
           </div>
           {renderTabla(arts, total, tabActiva)}
         </div>
+      })()}
+
+      {/* TABS CATÁLOGO — Bollería y Otros */}
+      {(tabActiva === 'cat_bolleria' || tabActiva === 'cat_otros') && (() => {
+        const esBolleria = tabActiva === 'cat_bolleria'
+        const titulo = esBolleria ? 'Bollería' : 'Otros pedidos especiales'
+        const emoji = esBolleria ? '🥐' : '🎁'
+        const filtradas = pedidosCatalogo.filter(p =>
+          esBolleria ? p.catalogo?.categoria === 'Bolleria' : p.catalogo?.categoria !== 'Bolleria'
+        ).sort((a, b) => (a.clientes?.orden_ruta || 9999) - (b.clientes?.orden_ruta || 9999))
+        const totalUds = filtradas.reduce((s, p) => s + Number(p.cantidad), 0)
+        return (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 10, padding: '10px 16px', fontSize: '0.85rem', color: 'var(--marron)', fontWeight: 700, flex: 1 }}>
+                {emoji} <strong>{titulo}</strong> — {fecha} — <strong style={{ color: 'var(--naranja)' }}>{totalUds} unidades</strong>
+              </div>
+              <button className="btn btn-primary btn-sm" style={{ marginLeft: 10 }}
+                onClick={() => { setFormCatalogo({ cliente_id: '', catalogo_id: '', cantidad: 1 }); setOpenCatalogo(true) }}>
+                <Plus size={14}/> Añadir pedido
+              </button>
+            </div>
+
+            {filtradas.length === 0 ? (
+              <div className="card"><div className="empty-state">
+                <span style={{ fontSize: 36 }}>{emoji}</span>
+                <p>No hay pedidos de {titulo} hoy</p>
+                <span>Pulsa "Añadir pedido" cuando un cliente te lo solicite</span>
+              </div></div>
+            ) : (
+              <div className="card" style={{ padding: 0 }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Ruta</th><th>Cliente</th><th>Artículo</th><th>Categoría</th><th style={{ textAlign: 'right' }}>Uds</th><th style={{ textAlign: 'right' }}>Precio</th><th></th></tr></thead>
+                    <tbody>
+                      {filtradas.map((p, i) => (
+                        <tr key={i}>
+                          <td style={{ fontFamily: 'Fredoka One', color: 'var(--naranja)' }}>{p.clientes?.orden_ruta || '—'}</td>
+                          <td><strong>{p.clientes?.nombre || '—'}</strong></td>
+                          <td>
+                            <div style={{ fontWeight: 700 }}>{p.catalogo?.nombre || '—'}</div>
+                            {p.catalogo?.descripcion && <div style={{ fontSize: '0.72rem', color: 'var(--gris)' }}>{p.catalogo.descripcion}</div>}
+                          </td>
+                          <td><span style={{ background: '#fff8f0', color: 'var(--naranja)', borderRadius: 5, padding: '1px 7px', fontSize: '0.7rem', fontWeight: 800 }}>{p.catalogo?.categoria || '—'}</span></td>
+                          <td style={{ textAlign: 'right' }}><span style={{ fontFamily: 'Fredoka One', fontSize: '1.3rem', color: '#2563eb' }}>{p.cantidad}</span></td>
+                          <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 700 }}>{Number(p.precio || 0).toFixed(2)} €</td>
+                          <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => deletePedidoCatalogo(p.id)}><Trash2 size={13}/></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#5a2d0c', color: 'white' }}>
+                        <td colSpan={4} style={{ fontFamily: 'Fredoka One', padding: '8px 10px' }}>TOTAL</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{totalUds} ud</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'Fredoka One' }}>{filtradas.reduce((s, p) => s + Number(p.precio || 0) * Number(p.cantidad), 0).toFixed(2)} €</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )
       })()}
 
       {tabActiva === 'pedidos' && (
@@ -1054,6 +1161,65 @@ export default function Pedidos() {
           </div>
         </div>
       )}
+
+      {/* MODAL AÑADIR PEDIDO CATÁLOGO */}
+      {openCatalogo && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenCatalogo(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">➕ Añadir pedido especial</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenCatalogo(false)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <div className="input-group">
+                <label className="input-label">Cliente</label>
+                <select className="select" value={formCatalogo.cliente_id} onChange={e => setFormCatalogo(v => ({ ...v, cliente_id: e.target.value }))}>
+                  <option value="">Seleccionar cliente...</option>
+                  {[...clientes].sort((a, b) => (a.orden_ruta||9999) - (b.orden_ruta||9999)).map(c => (
+                    <option key={c.id} value={c.id}>{c.orden_ruta ? `#${c.orden_ruta} ` : ''}{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Artículo del catálogo</label>
+                <select className="select" value={formCatalogo.catalogo_id} onChange={e => setFormCatalogo(v => ({ ...v, catalogo_id: e.target.value }))}>
+                  <option value="">Seleccionar artículo...</option>
+                  {['Bolleria','Tartas','Especiales','Bandejas','Rincon Gallego','Especial Fin de Semana'].map(cat => {
+                    const catItems = catalogoItems.filter(i => i.categoria === cat)
+                    if (catItems.length === 0) return null
+                    return <optgroup key={cat} label={cat}>
+                      {catItems.map(i => <option key={i.id} value={i.id}>{i.nombre}{i.precio > 0 ? ` — ${Number(i.precio).toFixed(2)} €` : ''}</option>)}
+                    </optgroup>
+                  })}
+                </select>
+              </div>
+              {formCatalogo.catalogo_id && (() => {
+                const item = catalogoItems.find(i => i.id === formCatalogo.catalogo_id)
+                return item ? (
+                  <div style={{ background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem' }}>
+                    <strong>{item.nombre}</strong>
+                    {item.descripcion && <span style={{ color: 'var(--gris)', marginLeft: 8 }}>{item.descripcion}</span>}
+                    <span style={{ float: 'right', fontFamily: 'Fredoka One', color: 'var(--naranja)' }}>
+                      {item.precio_label || (item.precio > 0 ? `${Number(item.precio).toFixed(2)} €` : 'Consultar')}
+                    </span>
+                    {item.solo_finde && <div style={{ color: '#b45309', fontWeight: 700, fontSize: '0.75rem', marginTop: 4 }}>Solo fin de semana</div>}
+                  </div>
+                ) : null
+              })()}
+              <div className="input-group">
+                <label className="input-label">Cantidad</label>
+                <input className="input" type="number" min="1" value={formCatalogo.cantidad}
+                  onChange={e => setFormCatalogo(v => ({ ...v, cantidad: parseInt(e.target.value) || 1 }))} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenCatalogo(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveCatalogoOrder}>✅ Añadir al pedido</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
