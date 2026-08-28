@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Package, ShoppingCart, FileText,
   Receipt, TrendingDown, Truck, Settings, LogOut,
   BarChart2, Brain, ChevronLeft, ChevronRight, MapPin,
-  ClipboardList, CheckSquare, HardDrive, Megaphone
+  ClipboardList, CheckSquare, HardDrive, Megaphone, BookOpen
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useState } from 'react'
@@ -33,7 +33,8 @@ const navItems = [
     { to: '/ia-facturas', icon: Brain, label: 'IA Facturas' },
   ]},
   { section: 'Marketing', items: [
-    { to: '/publicidad', icon: Megaphone, label: 'Catálogo' },
+    { to: '/catalogo', icon: BookOpen, label: 'Catálogo' },
+    { to: '/publicidad', icon: Megaphone, label: 'Publicidad' },
   ]},
   { section: 'Sistema', items: [
     { to: '/configuracion', icon: Settings, label: 'Configuración' },
