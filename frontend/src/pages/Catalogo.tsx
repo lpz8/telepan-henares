@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Trash2, X, Edit2, MoveUp, MoveDown } from 'lucide-react'
+import { Plus, Trash2, X, Edit2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
@@ -255,8 +255,8 @@ export default function Catalogo() {
               </div>
               <div style={{ padding: '8px 14px 12px', borderTop: '1px solid #f5e8d8', display: 'flex', gap: 6, alignItems: 'center' }}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(item)}><Edit2 size={14}/></button>
-                <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moverOrden(item, 'up')}><MoveUp size={14}/></button>
-                <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moverOrden(item, 'down')}><MoveDown size={14}/></button>
+                <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moverOrden(item, 'up')}><ChevronUp size={14}/></button>
+                <button className="btn btn-secondary btn-sm btn-icon" onClick={() => moverOrden(item, 'down')}><ChevronDown size={14}/></button>
                 <button className="btn btn-sm" onClick={() => toggleActivo(item)}
                   style={{ background: item.activo ? '#f9fafb' : '#f0fdf4', color: item.activo ? '#6b7280' : '#16a34a', border: '1px solid currentColor', borderRadius: 6, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800 }}>
                   {item.activo ? 'Ocultar' : 'Activar'}
