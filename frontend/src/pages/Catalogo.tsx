@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { globalToast } from '../components/Layout'
 
-const CATEGORIAS = ['Bolleria', 'Tartas', 'Especiales', 'Bandejas', 'Rincon Gallego']
+const CATEGORIAS = ['Bolleria', 'Tartas', 'Especiales', 'Bandejas', 'Rincon Gallego', 'Especial Fin de Semana']
 
 const CAT_COLORS: Record<string, string> = {
   'Bolleria': '#E8670A',
@@ -12,10 +12,11 @@ const CAT_COLORS: Record<string, string> = {
   'Especiales': '#7c3aed',
   'Bandejas': '#0891b2',
   'Rincon Gallego': '#16a34a',
+  'Especial Fin de Semana': '#b45309',
 }
 
 const EMISOR = { nombre: 'TelePan Henares', slogan: 'la panaderia en casa', telefono: '633 95 85 32' }
-const emptyForm = { nombre: '', descripcion: '', categoria: 'Bolleria', precio: 0, precio_label: '', foto_base64: '', activo: true, orden: 0 }
+const emptyForm = { nombre: '', descripcion: '', categoria: 'Bolleria', precio: 0, precio_label: '', foto_base64: '', activo: true, orden: 0, solo_finde: false }
 
 export default function Catalogo() {
   const { user } = useAuth()
@@ -50,7 +51,7 @@ export default function Catalogo() {
 
   const openEdit = (item: any) => {
     setEditing(item)
-    setForm({ nombre: item.nombre, descripcion: item.descripcion || '', categoria: item.categoria, precio: item.precio, precio_label: item.precio_label || '', foto_base64: item.foto_base64 || '', activo: item.activo, orden: item.orden || 0 })
+    setForm({ nombre: item.nombre, descripcion: item.descripcion || '', categoria: item.categoria, precio: item.precio, precio_label: item.precio_label || '', foto_base64: item.foto_base64 || '', activo: item.activo, orden: item.orden || 0, solo_finde: item.solo_finde || false })
     setFotoPreview(item.foto_base64 || '')
     setOpenModal(true)
   }
@@ -194,6 +195,22 @@ export default function Catalogo() {
       <div className="page-header">
         <h1 className="page-title">Catalogo</h1>
         <div className="page-actions">
+          <button className="btn btn-sm" style={{ background: '#25D366', color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 800, cursor: 'pointer' }}
+            onClick={() => {
+              const lineas = ['CATALOGO TELEPAN HENARES', 'Tel: 633 95 85 32', '']
+              CATEGORIAS.forEach(cat => {
+                const catItems = items.filter(i => i.activo && i.categoria === cat)
+                if (catItems.length === 0) return
+                lineas.push('--- ' + cat.toUpperCase() + ' ---')
+                catItems.forEach(item => {
+                  lineas.push(item.nombre + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar')))
+                  if (item.descripcion) lineas.push('  ' + item.descripcion)
+                  if (item.solo_finde) lineas.push('  Solo disponible fin de semana')
+                })
+                lineas.push('')
+              })
+              window.open('https://wa.me/?text=' + encodeURIComponent(lineas.join('\n')), '_blank')
+            }}>WhatsApp Catalogo</button>
           <button className="btn btn-secondary" onClick={descargarPDF} disabled={descargando}>PDF</button>
           <button className="btn btn-secondary" onClick={descargarJPG} disabled={descargando}>JPG</button>
           <button className="btn btn-primary" onClick={openNew}><Plus size={16}/> Anadir</button>
@@ -238,6 +255,7 @@ export default function Catalogo() {
                 }
                 <span style={{ position: 'absolute', top: 8, left: 8, background: CAT_COLORS[item.categoria] || '#E8670A', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.65rem', fontWeight: 800 }}>{item.categoria}</span>
                 <span style={{ position: 'absolute', top: 8, right: 8, background: item.activo ? '#16a34a' : '#6b7280', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.65rem', fontWeight: 800 }}>{item.activo ? 'Activo' : 'Oculto'}</span>
+                {item.solo_finde && <span style={{ position: 'absolute', bottom: 8, left: 8, background: '#b45309', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.65rem', fontWeight: 800 }}>Solo fin de semana</span>}
               </div>
               <div style={{ padding: '12px 14px' }}>
                 <div style={{ fontFamily: 'Fredoka One', fontSize: '1rem', color: 'var(--marron)', marginBottom: 4 }}>{item.nombre}</div>
@@ -254,6 +272,11 @@ export default function Catalogo() {
                   style={{ background: item.activo ? '#f9fafb' : '#f0fdf4', color: item.activo ? '#6b7280' : '#16a34a', border: '1px solid currentColor', borderRadius: 6, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800 }}>
                   {item.activo ? 'Ocultar' : 'Activar'}
                 </button>
+                <button className="btn btn-sm" style={{ background: '#25D366', color: 'white', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800 }}
+                  onClick={() => {
+                    const texto = item.nombre + (item.descripcion ? ' - ' + item.descripcion : '') + ' - ' + (item.precio_label || (item.precio > 0 ? Number(item.precio).toFixed(2) + ' EUR' : 'Consultar precio')) + (item.solo_finde ? ' (Solo fin de semana)' : '')
+                    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank')
+                  }}>WA</button>
                 <button className="btn btn-danger btn-sm btn-icon" style={{ marginLeft: 'auto' }} onClick={() => deleteItem(item.id)}><Trash2 size={14}/></button>
               </div>
             </div>
@@ -322,9 +345,15 @@ export default function Catalogo() {
                 <input className="input" value={form.precio_label} onChange={e => fSet('precio_label', e.target.value)} placeholder="Ej: Desde 18,50 EUR / Solo temporada..." />
                 <span style={{ fontSize: '0.72rem', color: 'var(--gris)', marginTop: 4, display: 'block' }}>Si lo rellenas, se muestra en vez del precio numerico</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="checkbox" id="activo-ck" checked={form.activo} onChange={e => fSet('activo', e.target.checked)} />
-                <label htmlFor="activo-ck" style={{ fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Visible en el catalogo</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" id="activo-ck" checked={form.activo} onChange={e => fSet('activo', e.target.checked)} />
+                  <label htmlFor="activo-ck" style={{ fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Visible en el catalogo</label>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '8px 12px' }}>
+                  <input type="checkbox" id="finde-ck" checked={(form as any).solo_finde} onChange={e => fSet('solo_finde', e.target.checked)} />
+                  <label htmlFor="finde-ck" style={{ fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', color: '#92400e' }}>Solo disponible fin de semana (sabado y domingo)</label>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
