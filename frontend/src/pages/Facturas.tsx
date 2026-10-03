@@ -237,6 +237,15 @@ export default function Facturas() {
   const [editLineas, setEditLineas] = useState<any[]>([])
   const [editLoading, setEditLoading] = useState(false)
   const [busquedaCliente, setBusquedaCliente] = useState('')
+  // Estado factura complementaria
+  const [openCompl, setOpenCompl] = useState(false)
+  const [complCliente, setComplCliente] = useState('')
+  const [complFechas, setComplFechas] = useState<string[]>([])
+  const [complFechaInput, setComplFechaInput] = useState('')
+  const [complPedidos, setComplPedidos] = useState<any[]>([])
+  const [complLoading, setComplLoading] = useState(false)
+  const [clientes, setClientes] = useState<any[]>([])
+  const [complBusq, setComplBusq] = useState('')
 
   const mesNum = String(parseInt(mes) + 1).padStart(2, '0')
 
@@ -252,6 +261,10 @@ export default function Facturas() {
     if (data) setFacturas(data)
   }
   useEffect(() => { load() }, [mes])
+  useEffect(() => {
+    supabase.from('clientes').select('id, nombre, orden_ruta, forma_pago, direccion, codigo_postal, poblacion, tipo_cliente, razon_social, cif, direccion_fiscal, cp_fiscal, poblacion_fiscal, provincia_fiscal, telefono1')
+      .order('orden_ruta').then(({ data }) => setClientes(data || []))
+  }, [])
 
   const generarFacturas = async () => {
     if (!user) return
@@ -654,6 +667,77 @@ export default function Facturas() {
 
 
 
+  // Cargar pedidos para fechas seleccionadas
+  const cargarPedidosCompl = async () => {
+    if (!complCliente || complFechas.length === 0) return
+    setComplLoading(true)
+    let todos: any[] = []
+    for (const fecha of complFechas) {
+      const { data } = await supabase.from('pedidos')
+        .select('id, cliente_id, producto_id, fecha, cantidad, precio, iva, productos(nombre)')
+        .eq('cliente_id', complCliente).eq('fecha', fecha)
+      if (data) todos = todos.concat(data)
+    }
+    setComplPedidos(todos)
+    setComplLoading(false)
+  }
+
+  const generarFacturaCompl = async () => {
+    if (!user || !complCliente || complPedidos.length === 0) return
+    setComplLoading(true)
+    try {
+      // Agrupar por producto+precio+iva
+      const byKey: Record<string, any> = {}
+      for (const p of complPedidos) {
+        const precio = Number(p.precio || 0)
+        const iva = Number(p.iva || 4)
+        const key = `${p.productos?.nombre || 'Producto'}||${precio}||${iva}`
+        if (!byKey[key]) byKey[key] = { nombre: p.productos?.nombre || 'Producto', cantidad: 0, precio, iva }
+        byKey[key].cantidad += Number(p.cantidad)
+      }
+      const lineas = Object.values(byKey).filter(l => l.cantidad > 0)
+      if (lineas.length === 0) { globalToast('No hay pedidos para esas fechas', 'error'); setComplLoading(false); return }
+
+      // Calcular totales
+      const b4  = lineas.filter(l => l.iva <= 4).reduce((s, l) => s + l.cantidad * l.precio, 0)
+      const b10 = lineas.filter(l => l.iva > 4 && l.iva <= 10).reduce((s, l) => s + l.cantidad * l.precio, 0)
+      const b21 = lineas.filter(l => l.iva > 10).reduce((s, l) => s + l.cantidad * l.precio, 0)
+      const c4 = b4 * 0.04, c10 = b10 * 0.10, c21 = b21 * 0.21
+      const totalFac = b4 + b10 + b21 + c4 + c10 + c21
+
+      // Número de factura — continúa desde el último del mes
+      const { data: existentes } = await supabase.from('facturas').select('numero').eq('mes', `${anio}-${mesNum}`).order('numero', { ascending: false }).limit(1)
+      let numSig = 1
+      if (existentes && existentes.length > 0) {
+        const lastNum = existentes[0].numero
+        const match = lastNum.match(/(\d+)$/)
+        if (match) numSig = parseInt(match[1]) + 1
+      }
+      const numStr = `F${anio}${mesNum}${String(numSig).padStart(3, '0')}C`
+      const fechaHoy = new Date().toISOString().split('T')[0]
+      const cliente = clientes.find(c => c.id === complCliente)
+
+      const { data: fac, error } = await supabase.from('facturas').insert({
+        user_id: user.id, numero: numStr, cliente_id: complCliente,
+        fecha: fechaHoy, mes: `${anio}-${mesNum}`,
+        tipo_pago: cliente?.forma_pago || 'Efectivo',
+        base: b4+b10+b21, iva_total: c4+c10+c21, total: totalFac,
+        base4: b4, cuota4: c4, base10: b10, cuota10: c10, base21: b21, cuota21: c21,
+      }).select().single()
+
+      if (error) throw new Error(error.message)
+
+      await supabase.from('lineas_factura').insert(
+        lineas.map(l => ({ factura_id: fac.id, producto_nombre: l.nombre, cantidad: l.cantidad, precio: l.precio, iva: l.iva }))
+      )
+
+      globalToast(`✅ Factura complementaria ${numStr} generada — ${totalFac.toFixed(2)} €`)
+      setOpenCompl(false); setComplCliente(''); setComplFechas([]); setComplPedidos([])
+      load()
+    } catch(err: any) { globalToast('Error: ' + err.message, 'error') }
+    setComplLoading(false)
+  }
+
   const filtered = getFilteredFacturas(facturas, tab).filter(f => {
     if (!busquedaCliente.trim()) return true
     const q = busquedaCliente.toLowerCase()
@@ -669,6 +753,12 @@ export default function Facturas() {
           <select className="select" style={{width:'auto'}} value={mes} onChange={e=>setMes(e.target.value)}>
             {MESES.map((m,i)=><option key={i} value={String(i)}>{m} {anio}</option>)}
           </select>
+          <button onClick={() => { setOpenCompl(true); setComplPedidos([]); setComplFechas([]); setComplCliente(''); setComplFechaInput(''); setComplBusq('') }}
+            className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', transition: 'background 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#eff6ff')}>
+            <Plus size={16}/> Factura complementaria
+          </button>
           <button className="btn btn-success" onClick={generarFacturas} disabled={loading}>
             <Zap size={16}/> {loading?'Generando...':'Generar facturas'}
           </button>
@@ -852,6 +942,144 @@ export default function Facturas() {
               <button className="btn btn-secondary" onClick={()=>setEditFactura(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={()=>{saveEdit();}} disabled={editLoading}>
                 <Printer size={14}/> Guardar e imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FACTURA COMPLEMENTARIA */}
+      {openCompl && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenCompl(false)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">➕ Factura complementaria — {MESES[parseInt(mes)]} {anio}</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setOpenCompl(false)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
+                💡 Selecciona un cliente y los días que faltan por facturar. Se añadirá una nueva factura al mes actual con sufijo C (complementaria).
+              </div>
+
+              {/* Selector cliente con búsqueda */}
+              <div className="input-group">
+                <label className="input-label">Cliente</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)', fontSize: '0.9rem' }}>🔍</span>
+                  <input className="input" style={{ paddingLeft: 32 }} placeholder="Buscar cliente..."
+                    value={complBusq} onChange={e => { setComplBusq(e.target.value); setComplCliente(''); setComplPedidos([]) }} />
+                </div>
+                {complBusq.trim() && (
+                  <div style={{ border: '1.5px solid #f5e8d8', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', background: 'white', boxShadow: '0 4px 12px #0001' }}>
+                    {clientes.filter(c => c.nombre.toLowerCase().includes(complBusq.toLowerCase())).map(c => (
+                      <div key={c.id} onClick={() => { setComplCliente(c.id); setComplBusq(c.nombre); setComplPedidos([]) }}
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #fdf5ee', fontSize: '0.85rem', fontWeight: complCliente === c.id ? 800 : 400, background: complCliente === c.id ? '#fff8f0' : 'white' }}>
+                        {c.orden_ruta ? <span style={{ color: 'var(--naranja)', fontWeight: 800, marginRight: 6 }}>#{c.orden_ruta}</span> : null}
+                        {c.nombre}
+                      </div>
+                    ))}
+                    {clientes.filter(c => c.nombre.toLowerCase().includes(complBusq.toLowerCase())).length === 0 && (
+                      <div style={{ padding: '8px 12px', color: 'var(--gris)', fontSize: '0.82rem' }}>Sin resultados</div>
+                    )}
+                  </div>
+                )}
+                {complCliente && (
+                  <div style={{ marginTop: 6, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '5px 10px', fontSize: '0.82rem', color: '#1e40af', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>✅ {clientes.find(c => c.id === complCliente)?.nombre}</span>
+                    <span style={{ cursor: 'pointer', color: '#dc2626' }} onClick={() => { setComplCliente(''); setComplBusq(''); setComplPedidos([]) }}>✕</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Selector fechas */}
+              <div className="input-group">
+                <label className="input-label">Días a incluir</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input className="input" type="date" value={complFechaInput}
+                    min={`${anio}-${mesNum}-01`}
+                    max={`${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`}
+                    onChange={e => setComplFechaInput(e.target.value)} style={{ flex: 1 }} />
+                  <button className="btn btn-secondary btn-sm" onClick={() => {
+                    if (!complFechaInput) return
+                    if (!complFechas.includes(complFechaInput)) setComplFechas(p => [...p, complFechaInput].sort())
+                    setComplFechaInput('')
+                  }}>+ Añadir día</button>
+                </div>
+                {complFechas.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {complFechas.map(f => (
+                      <span key={f} style={{ background: '#fff8f0', border: '1px solid #E8670A', borderRadius: 6, padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        📅 {f}
+                        <span style={{ cursor: 'pointer', color: '#dc2626' }} onClick={() => setComplFechas(p => p.filter(x => x !== f))}>✕</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón buscar */}
+              <button className="btn btn-secondary btn-sm" style={{ marginBottom: 12 }}
+                disabled={!complCliente || complFechas.length === 0 || complLoading}
+                onClick={cargarPedidosCompl}>
+                {complLoading ? '⏳ Buscando...' : '🔍 Buscar pedidos de esos días'}
+              </button>
+
+              {/* Resultado */}
+              {complPedidos.length > 0 && (() => {
+                const byKey: Record<string, any> = {}
+                for (const p of complPedidos) {
+                  const precio = Number(p.precio || 0)
+                  const iva = Number(p.iva || 4)
+                  const key = `${p.productos?.nombre || 'Producto'}||${precio}||${iva}`
+                  if (!byKey[key]) byKey[key] = { nombre: p.productos?.nombre || 'Producto', cantidad: 0, precio, iva, fecha: p.fecha }
+                  byKey[key].cantidad += Number(p.cantidad)
+                }
+                const lineas = Object.values(byKey).filter(l => l.cantidad > 0)
+                const total = lineas.reduce((s, l) => s + l.cantidad * l.precio * (1 + l.iva / 100), 0)
+                return (
+                  <div>
+                    <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '8px 12px', marginBottom: 8, fontSize: '0.82rem', color: '#16a34a', fontWeight: 700 }}>
+                      ✅ {complPedidos.length} líneas encontradas — Total: {total.toFixed(2)} €
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ background: '#E8670A' }}>
+                          <th style={{ color: 'white', padding: '6px 10px', textAlign: 'left' }}>Artículo</th>
+                          <th style={{ color: 'white', padding: '6px 10px', textAlign: 'center' }}>Cant.</th>
+                          <th style={{ color: 'white', padding: '6px 10px', textAlign: 'right' }}>P. unit.</th>
+                          <th style={{ color: 'white', padding: '6px 10px', textAlign: 'center' }}>IVA</th>
+                          <th style={{ color: 'white', padding: '6px 10px', textAlign: 'right' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lineas.map((l, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #f0e0d0' }}>
+                            <td style={{ padding: '6px 10px', fontWeight: 700 }}>{l.nombre}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>{l.cantidad}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right' }}>{l.precio.toFixed(2)} €</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', color: l.iva <= 4 ? '#16a34a' : '#E8670A', fontWeight: 800 }}>{l.iva}%</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>
+                              {(l.cantidad * l.precio * (1 + l.iva / 100)).toFixed(2)} €
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })()}
+
+              {complPedidos.length === 0 && complCliente && complFechas.length > 0 && !complLoading && (
+                <div style={{ color: 'var(--gris)', fontSize: '0.82rem', padding: '8px 0' }}>
+                  Pulsa "Buscar pedidos" para ver qué hay en esas fechas.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setOpenCompl(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={generarFacturaCompl}
+                disabled={complPedidos.length === 0 || complLoading}>
+                ✅ Generar factura complementaria
               </button>
             </div>
           </div>
