@@ -242,6 +242,7 @@ export default function Facturas() {
   const [complCliente, setComplCliente] = useState('')
   const [complFechas, setComplFechas] = useState<string[]>([])
   const [complFechaInput, setComplFechaInput] = useState('')
+  const [complModo, setComplModo] = useState<'dias'|'mes'>('dias')
   const [complPedidos, setComplPedidos] = useState<any[]>([])
   const [complLoading, setComplLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
@@ -669,14 +670,24 @@ export default function Facturas() {
 
   // Cargar pedidos para fechas seleccionadas
   const cargarPedidosCompl = async () => {
-    if (!complCliente || complFechas.length === 0) return
+    if (!complCliente) return
+    if (complModo === 'dias' && complFechas.length === 0) return globalToast('Añade al menos un día', 'error')
     setComplLoading(true)
     let todos: any[] = []
-    for (const fecha of complFechas) {
+    if (complModo === 'mes') {
       const { data } = await supabase.from('pedidos')
         .select('id, cliente_id, producto_id, fecha, cantidad, precio, iva, productos(nombre)')
-        .eq('cliente_id', complCliente).eq('fecha', fecha)
-      if (data) todos = todos.concat(data)
+        .eq('cliente_id', complCliente)
+        .gte('fecha', `${anio}-${mesNum}-01`)
+        .lte('fecha', `${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`)
+      if (data) todos = data
+    } else {
+      for (const fecha of complFechas) {
+        const { data } = await supabase.from('pedidos')
+          .select('id, cliente_id, producto_id, fecha, cantidad, precio, iva, productos(nombre)')
+          .eq('cliente_id', complCliente).eq('fecha', fecha)
+        if (data) todos = todos.concat(data)
+      }
     }
     setComplPedidos(todos)
     setComplLoading(false)
@@ -753,7 +764,7 @@ export default function Facturas() {
           <select className="select" style={{width:'auto'}} value={mes} onChange={e=>setMes(e.target.value)}>
             {MESES.map((m,i)=><option key={i} value={String(i)}>{m} {anio}</option>)}
           </select>
-          <button onClick={() => { setOpenCompl(true); setComplPedidos([]); setComplFechas([]); setComplCliente(''); setComplFechaInput(''); setComplBusq('') }}
+          <button onClick={() => { setOpenCompl(true); setComplPedidos([]); setComplFechas([]); setComplCliente(''); setComplFechaInput(''); setComplBusq(''); setComplModo('dias') }}
             className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
             onMouseLeave={e => (e.currentTarget.style.background = '#eff6ff')}>
@@ -991,31 +1002,57 @@ export default function Facturas() {
                 )}
               </div>
 
-              {/* Selector fechas */}
+              {/* Selector modo */}
               <div className="input-group">
-                <label className="input-label">Días a incluir</label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input className="input" type="date" value={complFechaInput}
-                    min={`${anio}-${mesNum}-01`}
-                    max={`${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`}
-                    onChange={e => setComplFechaInput(e.target.value)} style={{ flex: 1 }} />
-                  <button className="btn btn-secondary btn-sm" onClick={() => {
-                    if (!complFechaInput) return
-                    if (!complFechas.includes(complFechaInput)) setComplFechas(p => [...p, complFechaInput].sort())
-                    setComplFechaInput('')
-                  }}>+ Añadir día</button>
+                <label className="input-label">¿Qué quieres incluir?</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[
+                    { key: 'dias', label: '📅 Días sueltos', desc: 'Selecciona uno o varios días concretos' },
+                    { key: 'mes',  label: '📆 Mes completo', desc: `Todo ${MESES[parseInt(mes)]} ${anio}` },
+                  ].map(opt => (
+                    <div key={opt.key} onClick={() => { setComplModo(opt.key as 'dias'|'mes'); setComplFechas([]); setComplPedidos([]) }}
+                      style={{ flex: 1, border: `2px solid ${complModo === opt.key ? '#2563eb' : '#e5e7eb'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: complModo === opt.key ? '#eff6ff' : 'white', transition: 'all 0.15s' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: complModo === opt.key ? '#2563eb' : '#555' }}>{opt.label}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--gris)', marginTop: 2 }}>{opt.desc}</div>
+                    </div>
+                  ))}
                 </div>
-                {complFechas.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {complFechas.map(f => (
-                      <span key={f} style={{ background: '#fff8f0', border: '1px solid #E8670A', borderRadius: 6, padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        📅 {f}
-                        <span style={{ cursor: 'pointer', color: '#dc2626' }} onClick={() => setComplFechas(p => p.filter(x => x !== f))}>✕</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
+
+              {/* Selector días sueltos */}
+              {complModo === 'dias' && (
+                <div className="input-group">
+                  <label className="input-label">Días a incluir</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input className="input" type="date" value={complFechaInput}
+                      min={`${anio}-${mesNum}-01`}
+                      max={`${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`}
+                      onChange={e => setComplFechaInput(e.target.value)} style={{ flex: 1 }} />
+                    <button className="btn btn-secondary btn-sm" onClick={() => {
+                      if (!complFechaInput) return
+                      if (!complFechas.includes(complFechaInput)) setComplFechas(p => [...p, complFechaInput].sort())
+                      setComplFechaInput('')
+                    }}>+ Añadir día</button>
+                  </div>
+                  {complFechas.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {complFechas.map(f => (
+                        <span key={f} style={{ background: '#fff8f0', border: '1px solid #E8670A', borderRadius: 6, padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          📅 {f}
+                          <span style={{ cursor: 'pointer', color: '#dc2626' }} onClick={() => setComplFechas(p => p.filter(x => x !== f))}>✕</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mes completo info */}
+              {complModo === 'mes' && (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem', color: '#1e40af', fontWeight: 700 }}>
+                  📆 Se incluirán todos los pedidos de <strong>{MESES[parseInt(mes)]} {anio}</strong> para el cliente seleccionado.
+                </div>
+              )}
 
               {/* Botón buscar */}
               <button className="btn btn-secondary btn-sm" style={{ marginBottom: 12 }}
