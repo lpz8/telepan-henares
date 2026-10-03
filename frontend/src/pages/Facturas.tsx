@@ -269,6 +269,7 @@ export default function Facturas() {
       .order('orden_ruta').then(({ data }) => setClientes(data || []))
   }, [])
 
+
   const generarFacturas = async () => {
     if (!user) return
     if (!confirm(`¿Generar facturas para ${MESES[parseInt(mes)]} ${anio}?\nSe eliminarán las ya existentes de ese mes.`)) return
@@ -966,7 +967,7 @@ export default function Facturas() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenCompl(false)}>
           <div className="modal" style={{ maxWidth: 600 }}>
             <div className="modal-header">
-              <h3 className="modal-title">➕ Factura complementaria — {MESES[parseInt(mes)]} {anio}</h3>
+              <h3 className="modal-title">➕ Factura complementaria</h3>
               <button className="btn btn-secondary btn-icon" onClick={() => setOpenCompl(false)}><X size={16}/></button>
             </div>
             <div className="modal-body">
@@ -1071,11 +1072,11 @@ export default function Facturas() {
                 </div>
               )}
 
-              {/* Botón buscar */}
+              {/* Botón buscar - ambos modos */}
               <button className="btn btn-secondary btn-sm" style={{ marginBottom: 12 }}
-                disabled={!complCliente || complFechas.length === 0 || complLoading}
+                disabled={!complCliente || (complModo === 'dias' && complFechas.length === 0) || complLoading}
                 onClick={cargarPedidosCompl}>
-                {complLoading ? '⏳ Buscando...' : '🔍 Buscar pedidos de esos días'}
+                {complLoading ? '⏳ Buscando...' : complModo === 'mes' ? `🔍 Buscar pedidos de ${MESES[parseInt(complMes)-1]} ${complAnio}` : '🔍 Buscar pedidos de esos días'}
               </button>
 
               {/* Resultado */}
@@ -1123,16 +1124,16 @@ export default function Facturas() {
                 )
               })()}
 
-              {complPedidos.length === 0 && complCliente && complFechas.length > 0 && !complLoading && (
+              {complPedidos.length === 0 && complCliente && (complModo === 'mes' || complFechas.length > 0) && !complLoading && (
                 <div style={{ color: 'var(--gris)', fontSize: '0.82rem', padding: '8px 0' }}>
-                  Pulsa "Buscar pedidos" para ver qué hay en esas fechas.
+                  Pulsa el botón de búsqueda para ver los pedidos.
                 </div>
               )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setOpenCompl(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={generarFacturaCompl}
-                disabled={complPedidos.length === 0 || complLoading}>
+                disabled={complPedidos.length === 0 || complLoading} title={complPedidos.length === 0 ? "Primero pulsa Buscar" : ""}>
                 ✅ Generar factura complementaria
               </button>
             </div>
