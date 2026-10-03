@@ -243,6 +243,8 @@ export default function Facturas() {
   const [complFechas, setComplFechas] = useState<string[]>([])
   const [complFechaInput, setComplFechaInput] = useState('')
   const [complModo, setComplModo] = useState<'dias'|'mes'>('dias')
+  const [complMes, setComplMes] = useState('')
+  const [complAnio, setComplAnio] = useState('')
   const [complPedidos, setComplPedidos] = useState<any[]>([])
   const [complLoading, setComplLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
@@ -678,8 +680,8 @@ export default function Facturas() {
       const { data } = await supabase.from('pedidos')
         .select('id, cliente_id, producto_id, fecha, cantidad, precio, iva, productos(nombre)')
         .eq('cliente_id', complCliente)
-        .gte('fecha', `${anio}-${mesNum}-01`)
-        .lte('fecha', `${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`)
+        .gte('fecha', `${complAnio}-${complMes}-01`)
+        .lte('fecha', `${complAnio}-${complMes}-${String(new Date(parseInt(complAnio), parseInt(complMes), 0).getDate()).padStart(2,'0')}`)
       if (data) todos = data
     } else {
       for (const fecha of complFechas) {
@@ -764,7 +766,7 @@ export default function Facturas() {
           <select className="select" style={{width:'auto'}} value={mes} onChange={e=>setMes(e.target.value)}>
             {MESES.map((m,i)=><option key={i} value={String(i)}>{m} {anio}</option>)}
           </select>
-          <button onClick={() => { setOpenCompl(true); setComplPedidos([]); setComplFechas([]); setComplCliente(''); setComplFechaInput(''); setComplBusq(''); setComplModo('dias') }}
+          <button onClick={() => { setOpenCompl(true); setComplPedidos([]); setComplFechas([]); setComplCliente(''); setComplFechaInput(''); setComplBusq(''); setComplModo('dias'); setComplMes(mesNum); setComplAnio(anio) }}
             className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
             onMouseLeave={e => (e.currentTarget.style.background = '#eff6ff')}>
@@ -1047,10 +1049,25 @@ export default function Facturas() {
                 </div>
               )}
 
-              {/* Mes completo info */}
+              {/* Mes completo - selector */}
               {complModo === 'mes' && (
-                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem', color: '#1e40af', fontWeight: 700 }}>
-                  📆 Se incluirán todos los pedidos de <strong>{MESES[parseInt(mes)]} {anio}</strong> para el cliente seleccionado.
+                <div className="input-group">
+                  <label className="input-label">Selecciona el mes a facturar</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select className="select" value={complMes} onChange={e => { setComplMes(e.target.value); setComplPedidos([]) }}>
+                      {MESES.map((m, i) => (
+                        <option key={i} value={String(i + 1).padStart(2, '0')}>{m}</option>
+                      ))}
+                    </select>
+                    <select className="select" style={{ width: 100 }} value={complAnio} onChange={e => { setComplAnio(e.target.value); setComplPedidos([]) }}>
+                      {[anio, String(parseInt(anio) - 1), String(parseInt(anio) - 2)].map(a => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginTop: 8, fontSize: '0.82rem', color: '#1e40af', fontWeight: 700 }}>
+                    📆 Se incluirán todos los pedidos de <strong>{MESES[parseInt(complMes) - 1]} {complAnio}</strong> para el cliente seleccionado.
+                  </div>
                 </div>
               )}
 
