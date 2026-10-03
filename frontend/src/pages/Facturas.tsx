@@ -971,23 +971,20 @@ export default function Facturas() {
               <button className="btn btn-secondary btn-icon" onClick={() => setOpenCompl(false)}><X size={16}/></button>
             </div>
             <div className="modal-body">
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.82rem', color: '#1e40af' }}>
-                💡 Selecciona un cliente y los días que faltan por facturar. Se añadirá una nueva factura al mes actual con sufijo C (complementaria).
-              </div>
 
-              {/* Selector cliente con búsqueda */}
+              {/* 1. Cliente */}
               <div className="input-group">
                 <label className="input-label">Cliente</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)', fontSize: '0.9rem' }}>🔍</span>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gris)' }}>🔍</span>
                   <input className="input" style={{ paddingLeft: 32 }} placeholder="Buscar cliente..."
                     value={complBusq} onChange={e => { setComplBusq(e.target.value); setComplCliente(''); setComplPedidos([]) }} />
                 </div>
-                {complBusq.trim() && (
+                {complBusq.trim() && !complCliente && (
                   <div style={{ border: '1.5px solid #f5e8d8', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', background: 'white', boxShadow: '0 4px 12px #0001' }}>
                     {clientes.filter(c => c.nombre.toLowerCase().includes(complBusq.toLowerCase())).map(c => (
                       <div key={c.id} onClick={() => { setComplCliente(c.id); setComplBusq(c.nombre); setComplPedidos([]) }}
-                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #fdf5ee', fontSize: '0.85rem', fontWeight: complCliente === c.id ? 800 : 400, background: complCliente === c.id ? '#fff8f0' : 'white' }}>
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #fdf5ee', fontSize: '0.85rem' }}>
                         {c.orden_ruta ? <span style={{ color: 'var(--naranja)', fontWeight: 800, marginRight: 6 }}>#{c.orden_ruta}</span> : null}
                         {c.nombre}
                       </div>
@@ -998,23 +995,24 @@ export default function Facturas() {
                   </div>
                 )}
                 {complCliente && (
-                  <div style={{ marginTop: 6, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '5px 10px', fontSize: '0.82rem', color: '#1e40af', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ marginTop: 6, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, padding: '5px 10px', fontSize: '0.82rem', color: '#16a34a', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
                     <span>✅ {clientes.find(c => c.id === complCliente)?.nombre}</span>
                     <span style={{ cursor: 'pointer', color: '#dc2626' }} onClick={() => { setComplCliente(''); setComplBusq(''); setComplPedidos([]) }}>✕</span>
                   </div>
                 )}
               </div>
 
-              {/* Selector modo */}
+              {/* 2. Modo */}
               <div className="input-group">
-                <label className="input-label">¿Qué quieres incluir?</label>
+                <label className="input-label">¿Qué quieres facturar?</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {[
-                    { key: 'dias', label: '📅 Días sueltos', desc: 'Selecciona uno o varios días concretos' },
-                    { key: 'mes',  label: '📆 Mes completo', desc: `Todo ${MESES[parseInt(mes)]} ${anio}` },
+                    { key: 'dias', label: '📅 Días sueltos', desc: 'Uno o varios días concretos' },
+                    { key: 'mes',  label: '📆 Mes completo', desc: 'Todos los pedidos de un mes' },
                   ].map(opt => (
-                    <div key={opt.key} onClick={() => { setComplModo(opt.key as 'dias'|'mes'); setComplFechas([]); setComplPedidos([]) }}
-                      style={{ flex: 1, border: `2px solid ${complModo === opt.key ? '#2563eb' : '#e5e7eb'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: complModo === opt.key ? '#eff6ff' : 'white', transition: 'all 0.15s' }}>
+                    <div key={opt.key}
+                      onClick={() => { setComplModo(opt.key as 'dias'|'mes'); setComplFechas([]); setComplPedidos([]) }}
+                      style={{ flex: 1, border: `2px solid ${complModo === opt.key ? '#2563eb' : '#e5e7eb'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: complModo === opt.key ? '#eff6ff' : 'white' }}>
                       <div style={{ fontWeight: 800, fontSize: '0.85rem', color: complModo === opt.key ? '#2563eb' : '#555' }}>{opt.label}</div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--gris)', marginTop: 2 }}>{opt.desc}</div>
                     </div>
@@ -1022,14 +1020,12 @@ export default function Facturas() {
                 </div>
               </div>
 
-              {/* Selector días sueltos */}
+              {/* 3a. Días sueltos */}
               {complModo === 'dias' && (
                 <div className="input-group">
                   <label className="input-label">Días a incluir</label>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input className="input" type="date" value={complFechaInput}
-                      min={`${anio}-${mesNum}-01`}
-                      max={`${anio}-${mesNum}-${String(new Date(parseInt(anio), parseInt(mesNum), 0).getDate()).padStart(2,'0')}`}
                       onChange={e => setComplFechaInput(e.target.value)} style={{ flex: 1 }} />
                     <button className="btn btn-secondary btn-sm" onClick={() => {
                       if (!complFechaInput) return
@@ -1050,43 +1046,44 @@ export default function Facturas() {
                 </div>
               )}
 
-              {/* Mes completo - selector */}
+              {/* 3b. Mes completo */}
               {complModo === 'mes' && (
                 <div className="input-group">
-                  <label className="input-label">Selecciona el mes a facturar</label>
+                  <label className="input-label">Mes y año a facturar</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <select className="select" value={complMes} onChange={e => { setComplMes(e.target.value); setComplPedidos([]) }}>
+                    <select className="select" value={complMes}
+                      onChange={e => { setComplMes(e.target.value); setComplPedidos([]) }}>
                       {MESES.map((m, i) => (
                         <option key={i} value={String(i + 1).padStart(2, '0')}>{m}</option>
                       ))}
                     </select>
-                    <select className="select" style={{ width: 100 }} value={complAnio} onChange={e => { setComplAnio(e.target.value); setComplPedidos([]) }}>
+                    <select className="select" style={{ width: 110 }} value={complAnio}
+                      onChange={e => { setComplAnio(e.target.value); setComplPedidos([]) }}>
                       {[anio, String(parseInt(anio) - 1), String(parseInt(anio) - 2)].map(a => (
                         <option key={a} value={a}>{a}</option>
                       ))}
                     </select>
                   </div>
-                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginTop: 8, fontSize: '0.82rem', color: '#1e40af', fontWeight: 700 }}>
-                    📆 Se incluirán todos los pedidos de <strong>{MESES[parseInt(complMes) - 1]} {complAnio}</strong> para el cliente seleccionado.
-                  </div>
                 </div>
               )}
 
-              {/* Botón buscar - ambos modos */}
+              {/* 4. Botón buscar */}
               <button className="btn btn-secondary btn-sm" style={{ marginBottom: 12 }}
                 disabled={!complCliente || (complModo === 'dias' && complFechas.length === 0) || complLoading}
                 onClick={cargarPedidosCompl}>
-                {complLoading ? '⏳ Buscando...' : complModo === 'mes' ? `🔍 Buscar pedidos de ${MESES[parseInt(complMes)-1]} ${complAnio}` : '🔍 Buscar pedidos de esos días'}
+                {complLoading ? '⏳ Buscando...' : complModo === 'mes'
+                  ? `🔍 Buscar pedidos de ${MESES[parseInt(complMes) - 1]} ${complAnio}`
+                  : '🔍 Buscar pedidos de esos días'}
               </button>
 
-              {/* Resultado */}
+              {/* 5. Resultado */}
               {complPedidos.length > 0 && (() => {
                 const byKey: Record<string, any> = {}
                 for (const p of complPedidos) {
                   const precio = Number(p.precio || 0)
                   const iva = Number(p.iva || 4)
                   const key = `${p.productos?.nombre || 'Producto'}||${precio}||${iva}`
-                  if (!byKey[key]) byKey[key] = { nombre: p.productos?.nombre || 'Producto', cantidad: 0, precio, iva, fecha: p.fecha }
+                  if (!byKey[key]) byKey[key] = { nombre: p.productos?.nombre || 'Producto', cantidad: 0, precio, iva }
                   byKey[key].cantidad += Number(p.cantidad)
                 }
                 const lineas = Object.values(byKey).filter(l => l.cantidad > 0)
@@ -1124,16 +1121,15 @@ export default function Facturas() {
                 )
               })()}
 
-              {complPedidos.length === 0 && complCliente && (complModo === 'mes' || complFechas.length > 0) && !complLoading && (
-                <div style={{ color: 'var(--gris)', fontSize: '0.82rem', padding: '8px 0' }}>
-                  Pulsa el botón de búsqueda para ver los pedidos.
-                </div>
+              {complPedidos.length === 0 && complCliente && !complLoading && (complModo === 'mes' || complFechas.length > 0) && (
+                <div style={{ color: 'var(--gris)', fontSize: '0.82rem' }}>Pulsa el botón de búsqueda para ver los pedidos.</div>
               )}
+
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setOpenCompl(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={generarFacturaCompl}
-                disabled={complPedidos.length === 0 || complLoading} title={complPedidos.length === 0 ? "Primero pulsa Buscar" : ""}>
+                disabled={complPedidos.length === 0 || complLoading}>
                 ✅ Generar factura complementaria
               </button>
             </div>
