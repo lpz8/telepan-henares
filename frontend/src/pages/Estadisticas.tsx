@@ -32,7 +32,7 @@ export default function Estadisticas() {
         <td><strong>${p.nombre}</strong>${p.esGrupo && p.productos?.length ? `<br><small style="color:#888">${p.productos.join(' · ')}</small>` : ''}</td>
         <td style="text-align:right"><strong>${p.unidades} ud</strong></td>
         <td style="text-align:right">${precioUnit.toFixed(4)} €</td>
-        <td style="text-align:right;color:#E8670A;font-weight:700">${p.conIva.toFixed(2)} €</td>
+        <td style="text-align:right;color:#E8670A;font-weight:700">${(Number(p.conIva)||0).toFixed(2)} €</td>
         <td style="text-align:right;color:#dc2626">${p.costeTotal>0?p.precioProveedor.toFixed(4)+' €':'—'}</td>
         <td style="text-align:right;font-weight:700;color:#dc2626">${p.costeTotal>0?p.costeTotal.toFixed(2)+' €':'—'}</td>
         <td style="text-align:right;font-weight:700;color:${margen!==null?(margen>=0?'#16a34a':'#dc2626'):'#ccc'}">${margen!==null?(margen>=0?'+':'')+margen.toFixed(2)+' €':'—'}</td>
@@ -84,7 +84,7 @@ export default function Estadisticas() {
     const w = window.open('', '_blank')
     if (!w) return globalToast('Permite las ventanas emergentes', 'error')
     w.document.write(html); w.document.close()
-    setTimeout(() => { if (w.contentWindow) (w.contentWindow as any).print = () => {}; w.print(); globalToast('💡 Selecciona "Guardar como PDF" en el diálogo') }, 800)
+    globalToast('💡 Abre el menú del navegador → Imprimir → Guardar como PDF')
   }
 
   const descargarProdJPG = async (filas: any[], catLabel: string) => {
@@ -134,6 +134,7 @@ export default function Estadisticas() {
   const [tabActiva, setTabActiva] = useState('resumen')
   const [gastosList, setGastosList] = useState<any[]>([])
   const [editandoGasto, setEditandoGasto] = useState<any>(null)
+  const [formGasto, setFormGasto] = useState({ concepto: '', categoria: 'General', importe: 0, fecha: '' })
 
   const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -175,10 +176,13 @@ export default function Estadisticas() {
 
     // Agrupación — PICOS, CASA+PISTOLA, ARTESANA
     const getGrupo = (nombre: string) => {
-      const n = (nombre || '').toUpperCase().trim()
-      if (n.includes('PICOS') || n.startsWith('PICOS')) return '🥨 PICOS (todos)'
+      const n = (nombre || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+      // PICOS — cualquier producto que contenga la palabra PICOS
+      if (n.includes('PICO')) return '🥨 PICOS (todos)'
+      // BARRAS — CASA o PISTOLA
       if (n.includes('CASA') || n.includes('PISTOLA')) return '🏠 BARRAS — CASA + PISTOLA'
-      if (n.includes('ARTESANA')) return '🥖 ARTESANA (todas)'
+      // ARTESANA
+      if (n.includes('ARTESANA') || n.includes('ARTESANO')) return '🥖 ARTESANA (todas)'
       return nombre
     }
 
@@ -221,7 +225,6 @@ export default function Estadisticas() {
   }
 
   useEffect(() => { loadProdMes(mesProd) }, [mesProd])
-  const [formGasto, setFormGasto] = useState({ concepto: '', categoria: 'General', importe: 0, fecha: '' })
 
   useEffect(() => {
     async function load() {
@@ -550,7 +553,7 @@ export default function Estadisticas() {
     if (!w) { globalToast('Permite las ventanas emergentes', 'error'); return }
     w.document.write(html)
     w.document.close()
-    setTimeout(() => w.print(), 800)
+    globalToast('💡 Usa Ctrl+P en la ventana abierta para guardar como PDF')
   }
 
   return (
@@ -965,15 +968,15 @@ export default function Estadisticas() {
                                   <td style={{textAlign:'right',fontWeight:700,color:'var(--naranja)'}}>
                                     {editandoTabla ? (
                                       <input type="number" min="0" step="0.01" style={{width:80,textAlign:'right',padding:'2px 6px',border:'1px solid #f5e8d8',borderRadius:6,fontSize:'0.85rem'}}
-                                        defaultValue={p.conIva.toFixed(2)}
+                                        defaultValue={(Number(p.conIva)||0).toFixed(2)}
                                         onChange={e => {
                                           const v = parseFloat(e.target.value)||0
                                           setProdMes((prev:any[]) => prev.map((x:any) => x.nombre===p.nombre ? {...x,conIva:v} : x))
                                         }}/>
-                                    ) : `${p.conIva.toFixed(2)} €`}
+                                    ) : `${(Number(p.conIva)||0).toFixed(2)} €`}
                                   </td>
                                   <td style={{textAlign:'right',color:p.costeTotal>0?'#dc2626':'#ccc',fontSize:'0.82rem'}}>
-                                    {p.costeTotal>0 ? `${p.costeTotal.toFixed(2)} €` : '—'}
+                                    {p.costeTotal>0 ? `${(Number(p.costeTotal)||0).toFixed(2)} €` : '—'}
                                   </td>
                                   <td style={{textAlign:'right'}}>
                                     {margen!==null ? (

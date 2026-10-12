@@ -65,6 +65,7 @@ export default function Pedidos() {
   const [loading, setLoading] = useState(false)
   const [openManual, setOpenManual] = useState(false)
   const [formManual, setFormManual] = useState({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 })
+  const [lineasManual, setLineasManual] = useState<{producto_id:string,nombre:string,cantidad:number,precio:number,iva:number}[]>([])
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
   const [suspendidos, setSuspendidos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
@@ -243,11 +244,14 @@ export default function Pedidos() {
   }
 
   const handleAddManual = async () => {
-    if (!user || !formManual.cliente_id || !formManual.producto_id) return globalToast('Selecciona cliente y producto', 'error')
-    const { error } = await supabase.from('pedidos').insert({ ...formManual, fecha, user_id: user.id })
+    if (!user || !formManual.cliente_id) return globalToast('Selecciona un cliente', 'error')
+    const todas = lineasManual.length > 0 ? lineasManual : (formManual.producto_id ? [{producto_id: formManual.producto_id, nombre:'', cantidad: formManual.cantidad, precio: formManual.precio, iva: formManual.iva}] : [])
+    if (todas.length === 0) return globalToast('Añade al menos un producto', 'error')
+    const inserts = todas.map(l => ({ cliente_id: formManual.cliente_id, producto_id: l.producto_id, cantidad: l.cantidad, precio: l.precio, iva: l.iva, fecha, user_id: user.id }))
+    const { error } = await supabase.from('pedidos').insert(inserts)
     if (error) return globalToast('Error: ' + error.message, 'error')
-    globalToast('Pedido añadido ✓')
-    setOpenManual(false); setFormManual({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 }); load()
+    globalToast(`✅ ${inserts.length} producto${inserts.length > 1 ? 's' : ''} añadido${inserts.length > 1 ? 's' : ''}`)
+    setOpenManual(false); setFormManual({ cliente_id: '', producto_id: '', cantidad: 1, precio: 0, iva: 4 }); setLineasManual([]); load()
   }
 
   const handleDelete = async (id: string) => { await supabase.from('pedidos').delete().eq('id', id); load() }
@@ -1113,13 +1117,14 @@ export default function Pedidos() {
 
       {/* MODAL AÑADIR MANUAL */}
       {openManual && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setOpenManual(false)}>
-          <div className="modal">
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && (setOpenManual(false), setLineasManual([]))}>
+          <div className="modal" style={{ maxWidth: 520 }}>
             <div className="modal-header">
-              <h3 className="modal-title">➕ Añadir Pedido Manual</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setOpenManual(false)}><X size={16} /></button>
+              <h3 className="modal-title">➕ Añadir cliente al pedido</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => { setOpenManual(false); setLineasManual([]) }}><X size={16} /></button>
             </div>
             <div className="modal-body">
+              {/* Cliente */}
               <div className="input-group">
                 <label className="input-label">Cliente</label>
                 <SearchableSelect
@@ -1133,8 +1138,27 @@ export default function Pedidos() {
                   }))}
                 />
               </div>
-              <div className="input-group">
-                <label className="input-label">Producto</label>
+
+              {/* Productos añadidos */}
+              {lineasManual.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <label className="input-label" style={{ marginBottom: 6, display: 'block' }}>Productos añadidos</label>
+                  {lineasManual.map((l, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff8f0', border: '1px solid #f5e8d8', borderRadius: 8, padding: '6px 10px', marginBottom: 6 }}>
+                      <span style={{ flex: 1, fontWeight: 700, fontSize: '0.85rem' }}>{l.nombre}</span>
+                      <input type="number" min={1} value={l.cantidad} style={{ width: 55, padding: '3px 6px', border: '1px solid #f5e8d8', borderRadius: 6, textAlign: 'center', fontSize: '0.85rem' }}
+                        onChange={e => setLineasManual(prev => prev.map((x, j) => j === i ? { ...x, cantidad: parseInt(e.target.value) || 1 } : x))} />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--gris)' }}>{l.precio.toFixed(2)} €</span>
+                      <button style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                        onClick={() => setLineasManual(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Añadir producto */}
+              <div style={{ background: '#f9fafb', border: '1.5px dashed #e5e7eb', borderRadius: 10, padding: '10px 12px' }}>
+                <label className="input-label" style={{ marginBottom: 6, display: 'block' }}>Añadir producto</label>
                 <SearchableSelect
                   value={formManual.producto_id}
                   onChange={v => {
@@ -1148,15 +1172,31 @@ export default function Pedidos() {
                     sublabel: `${Number(p.precio_sin_iva).toFixed(2)} € · IVA ${p.iva}%`
                   }))}
                 />
-              </div>
-              <div className="input-group">
-                <label className="input-label">Cantidad</label>
-                <input className="input" type="number" min={1} value={formManual.cantidad} onChange={e => setFormManual(f => ({ ...f, cantidad: parseInt(e.target.value) || 1 }))} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gris)' }}>Cantidad:</label>
+                    <input className="input" type="number" min={1} value={formManual.cantidad} style={{ width: 65 }}
+                      onChange={e => setFormManual(f => ({ ...f, cantidad: parseInt(e.target.value) || 1 }))} />
+                  </div>
+                  <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }}
+                    disabled={!formManual.producto_id}
+                    onClick={() => {
+                      const prod = productos.find(p => p.id === formManual.producto_id)
+                      if (!prod) return
+                      setLineasManual(prev => [...prev, { producto_id: formManual.producto_id, nombre: prod.nombre, cantidad: formManual.cantidad, precio: formManual.precio, iva: formManual.iva }])
+                      setFormManual(f => ({ ...f, producto_id: '', cantidad: 1, precio: 0, iva: 4 }))
+                    }}>
+                    + Añadir a la lista
+                  </button>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setOpenManual(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleAddManual}>✅ Añadir</button>
+              <button className="btn btn-secondary" onClick={() => { setOpenManual(false); setLineasManual([]) }}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleAddManual}
+                disabled={!formManual.cliente_id || lineasManual.length === 0}>
+                ✅ Guardar pedido ({lineasManual.length} producto{lineasManual.length !== 1 ? 's' : ''})
+              </button>
             </div>
           </div>
         </div>

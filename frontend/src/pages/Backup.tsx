@@ -95,38 +95,6 @@ export default function Backup() {
     setExportandoExcel(false)
   }
 
-     const exportarWhatsApp = async () => {
-  if (!user) return
-  setLoading(true)
-  try {
-    const { data: clientes } = await supabase
-      .from('clientes')
-      .select('nombre, telefono1, telefono2, poblacion, direccion')
-      .order('nombre')
-
-    if (!clientes?.length) { globalToast('No hay clientes', 'error'); setLoading(false); return }
-
-    const vcf = (clientes || []).map(c => {
-      const tel1 = (c.telefono1 || '').replace(/\D/g, '')
-      const tel2 = (c.telefono2 || '').replace(/\D/g, '')
-      let card = `BEGIN:VCARD\nVERSION:3.0\nFN:${c.nombre}\nN:${c.nombre};;;;\nORG:Cliente TelePan\nADR:;;${c.direccion || ''};${c.poblacion || ''};;;\n`
-      if (tel1) card += `TEL;TYPE=CELL:+34${tel1}\n`
-      if (tel2) card += `TEL;TYPE=WORK:+34${tel2}\n`
-      card += `NOTE:Cliente TelePan Henares - ${c.poblacion || ''}\nEND:VCARD`
-      return card
-    }).join('\n\n')
-
-    const blob = new Blob([vcf], { type: 'text/vcard;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `contactos-telepan-${new Date().toISOString().split('T')[0]}.vcf`
-    a.click()
-    URL.revokeObjectURL(a.href)
-    globalToast(`✅ ${clientes.length} contactos exportados — importa el archivo en tu móvil`)
-  } catch (err: any) { globalToast(err.message, 'error') }
-  setLoading(false)
-}
-
   const exportarPDF = async () => {
     if (!user) return
     setExportandoPDF(true)
@@ -270,24 +238,6 @@ export default function Backup() {
           <Download size={18} />
           {exportandoPDF ? 'Generando PDFs...' : '📄 Descargar en PDF — 3 archivos (Clientes, Facturas, Gastos)'}
         </button>
-        <div className="card" style={{ marginBottom: 16, border: '1.5px solid #dcfce7', background: '#f0fdf4' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-    <span style={{ fontSize: '1.3rem' }}>📱</span>
-    <h3 style={{ fontFamily: 'Fredoka One', color: '#16a34a', fontSize: '1rem' }}>Exportar contactos a WhatsApp</h3>
-  </div>
-  <p style={{ fontSize: '0.85rem', color: '#166534', marginBottom: 14 }}>
-    Descarga todos tus clientes como contactos del móvil. Impórtalos y WhatsApp los reconocerá automáticamente.
-  </p>
-  <button className="btn btn-success" onClick={exportarWhatsApp} disabled={loading}
-    style={{ width: '100%', justifyContent: 'center', padding: 12 }}>
-    📱 {loading ? 'Exportando...' : 'Descargar contactos (.vcf)'}
-  </button>
-  <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#166534' }}>
-    <strong>iPhone:</strong> Abre el archivo .vcf → "Añadir todos los contactos"<br />
-    <strong>Android:</strong> Abre el archivo .vcf → "Importar" en Contactos<br />
-    <strong>WhatsApp</strong> los detectará automáticamente al sincronizar
-  </div>
-</div>
         <p style={{ fontSize: '0.75rem', color: '#166534', marginTop: 10, textAlign: 'center' }}>
           💡 Para PDF: se abren 3 ventanas · en cada una pulsa <strong>Ctrl+P → Guardar como PDF</strong>
         </p>
